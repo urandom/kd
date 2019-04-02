@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
@@ -21,40 +22,18 @@ type UserRetryableError struct {
 
 type ClientFactory func() (k8s.Client, error)
 
-type MainPresenter struct {
-	clientFactory ClientFactory
-	ui            *UI
-
-	client        k8s.Client
-	podsPresenter *PodsPresenter
+type ErrorPresenter struct {
+	ui *UI
 }
 
-func NewMainPresenter(ui *UI, clientFactory ClientFactory) *MainPresenter {
-	return &MainPresenter{clientFactory: clientFactory, ui: ui}
-}
+func (p ErrorPresenter) displayError(err error) bool {
+	if err == nil {
+		p.ui.app.QueueUpdateDraw(func() {
+			p.ui.pages.HidePage(pageK8sError)
+		})
+		return false
+	}
 
-func (p *MainPresenter) Run() error {
-	go func() {
-		if err := p.initClient(); err == nil {
-			p.podsPresenter = NewPodsPresenter(p.ui, p.client)
-			if err := p.podsPresenter.populateNamespaces(); err != nil {
-				p.displayError(err)
-			}
-		} else {
-			p.displayError(err)
-		}
-	}()
-
-	return p.ui.app.Run()
-}
-
-const (
-	buttonQuit  = "Quit"
-	buttonClose = "Close"
-	buttonRetry = "Retry"
-)
-
-func (p *MainPresenter) displayError(err error) {
 	var buttons []string
 
 	if xerrors.As(err, &FatalError{}) {
@@ -67,7 +46,7 @@ func (p *MainPresenter) displayError(err error) {
 		buttons = append(buttons, buttonRetry)
 	}
 
-	p.ui.app.QueueUpdate(func() {
+	p.ui.app.QueueUpdateDraw(func() {
 		p.ui.errorModal.
 			SetText(fmt.Sprintf("Error creating k8s client: %s", err)).
 			ClearButtons().
@@ -81,17 +60,49 @@ func (p *MainPresenter) displayError(err error) {
 				case buttonRetry:
 					p.ui.pages.HidePage(pageK8sError)
 					go func() {
-						if err := err.(UserRetryableError).RetryOp(); err != nil {
-							p.displayError(err)
-						}
+						p.displayError(err.(UserRetryableError).RetryOp())
 					}()
 				}
 			})
 		p.ui.pages.ShowPage(pageK8sError)
 		p.ui.app.SetFocus(p.ui.errorModal)
-		p.ui.app.Draw()
 	})
+
+	return true
 }
+
+type MainPresenter struct {
+	ErrorPresenter
+
+	clientFactory ClientFactory
+
+	client        k8s.Client
+	podsPresenter *PodsPresenter
+}
+
+func NewMainPresenter(ui *UI, clientFactory ClientFactory) *MainPresenter {
+	return &MainPresenter{
+		ErrorPresenter: ErrorPresenter{ui: ui},
+		clientFactory:  clientFactory,
+	}
+}
+
+func (p *MainPresenter) Run() error {
+	go func() {
+		if !p.displayError(p.initClient()) {
+			p.podsPresenter = NewPodsPresenter(p.ui, p.client)
+			p.displayError(p.podsPresenter.populateNamespaces())
+		}
+	}()
+
+	return p.ui.app.Run()
+}
+
+const (
+	buttonQuit  = "Quit"
+	buttonClose = "Close"
+	buttonRetry = "Retry"
+)
 
 func (p *MainPresenter) initClient() error {
 	var err error
@@ -106,12 +117,16 @@ func (p *MainPresenter) initClient() error {
 }
 
 type PodsPresenter struct {
-	ui     *UI
+	ErrorPresenter
+
 	client k8s.Client
 }
 
 func NewPodsPresenter(ui *UI, client k8s.Client) *PodsPresenter {
-	return &PodsPresenter{ui: ui, client: client}
+	return &PodsPresenter{
+		ErrorPresenter: ErrorPresenter{ui},
+		client:         client,
+	}
 }
 
 func (p *PodsPresenter) populateNamespaces() error {
@@ -120,9 +135,14 @@ func (p *PodsPresenter) populateNamespaces() error {
 		p.ui.pages.ShowPage(pageLoading)
 	})
 	if namespaces, err := p.client.Namespaces(); err == nil {
-		p.ui.app.QueueUpdate(func() {
+		p.ui.app.QueueUpdateDraw(func() {
 			p.ui.namespaceDropDown.SetOptions(namespaces, func(text string, idx int) {
-				p.populatePods(text)
+				done := make(chan struct{})
+				spinText(p.ui.app, p.ui.statusBar, "Loading pods", done)
+				go func() {
+					p.displayError(p.populatePods(text))
+					close(done)
+				}()
 			})
 			p.ui.namespaceDropDown.SetCurrentOption(0)
 			p.ui.pages.SwitchToPage(pagePods)
@@ -130,7 +150,6 @@ func (p *PodsPresenter) populateNamespaces() error {
 			p.ui.namespaceDropDown.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.podsDetails, p.ui.podsTree))
 			p.ui.podsTree.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.namespaceDropDown, p.ui.podsDetails))
 			p.ui.podsDetails.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.podsTree, p.ui.namespaceDropDown))
-			p.ui.app.Draw()
 		})
 
 		return nil
@@ -141,32 +160,35 @@ func (p *PodsPresenter) populateNamespaces() error {
 }
 
 func (p *PodsPresenter) populatePods(ns string) error {
-	root := tview.NewTreeNode(".")
-	log.Printf("Getting pod tree for namespace %s", ns)
-	p.ui.podsTree.SetRoot(root).SetCurrentNode(root)
-
 	podTree, err := p.client.PodTree(ns)
 	if err != nil {
-		log.Println("Error getting pod tree for namespaces %s: %s", ns, err)
+		log.Printf("Error getting pod tree for namespaces %s: %s", ns, err)
 		return UserRetryableError{err, func() error {
 			return p.populatePods(ns)
 		}}
 	}
 
-	if len(podTree.Deployments) > 0 {
-		dn := tview.NewTreeNode("Deployments").SetSelectable(true)
-		root.AddChild(dn)
+	p.ui.app.QueueUpdateDraw(func() {
+		root := tview.NewTreeNode(".")
+		log.Printf("Getting pod tree for namespace %s", ns)
+		p.ui.podsTree.SetRoot(root).SetCurrentNode(root)
 
-		for _, deployment := range podTree.Deployments {
-			d := tview.NewTreeNode(deployment.GetObjectMeta().GetName()).SetSelectable(true)
-			dn.AddChild(d)
+		if len(podTree.Deployments) > 0 {
+			dn := tview.NewTreeNode("Deployments").SetSelectable(true)
+			root.AddChild(dn)
 
-			for _, pod := range deployment.Pods {
-				p := tview.NewTreeNode(pod.GetObjectMeta().GetName()).SetSelectable(true)
-				d.AddChild(p)
+			for _, deployment := range podTree.Deployments {
+				d := tview.NewTreeNode(deployment.GetObjectMeta().GetName()).SetSelectable(true)
+				dn.AddChild(d)
+
+				for _, pod := range deployment.Pods {
+					p := tview.NewTreeNode(pod.GetObjectMeta().GetName()).SetSelectable(true)
+					d.AddChild(p)
+				}
 			}
 		}
-	}
+
+	})
 
 	return nil
 }
@@ -174,7 +196,7 @@ func (p *PodsPresenter) populatePods(ns string) error {
 func cycleFocusCapture(app *tview.Application, prev, next tview.Primitive) func(event *tcell.EventKey) *tcell.EventKey {
 	return func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
-		case tcell.KeyTAB:
+		case tcell.KeyTab:
 			app.SetFocus(next)
 			return nil
 		case tcell.KeyBacktab:
@@ -183,4 +205,30 @@ func cycleFocusCapture(app *tview.Application, prev, next tview.Primitive) func(
 		}
 		return event
 	}
+}
+
+var spinners = [...]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+func spinText(app *tview.Application, textView *tview.TextView, text string, done <-chan struct{}) {
+	app.QueueUpdateDraw(func() {
+		textView.SetText(spinners[0] + " " + text)
+	})
+	go func() {
+		i := 1
+		for {
+			select {
+			case <-done:
+				app.QueueUpdateDraw(func() {
+					textView.SetText("")
+				})
+				return
+			case <-time.After(100 * time.Millisecond):
+				spin := i % len(spinners)
+				app.QueueUpdateDraw(func() {
+					textView.SetText(spinners[spin] + " " + text)
+				})
+				i++
+			}
+		}
+	}()
 }

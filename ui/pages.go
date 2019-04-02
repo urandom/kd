@@ -16,6 +16,7 @@ func (ui *UI) setupPages() {
 	ui.podsTree.SetBorder(true).SetTitle("Pods")
 	ui.podsDetails = tview.NewTextView()
 	ui.podsDetails.SetBorder(true).SetTitle("Details")
+	ui.statusBar = tview.NewTextView()
 
 	ui.pages.AddPage(pagePods,
 		tview.NewFlex().
@@ -25,7 +26,8 @@ func (ui *UI) setupPages() {
 				tview.NewFlex().
 					AddItem(ui.podsTree, 0, 1, true).
 					AddItem(ui.podsDetails, 0, 1, true),
-				0, 1, true),
+				0, 1, true).
+			AddItem(ui.statusBar, 1, 0, false),
 		true, false)
 
 	ui.pages.AddPage(pageLoading, tview.NewGrid().
