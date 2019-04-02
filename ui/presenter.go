@@ -166,7 +166,9 @@ func (p *PodsPresenter) populateNamespaces() error {
 			p.ui.app.SetFocus(p.ui.namespaceDropDown)
 			p.ui.namespaceDropDown.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.podsDetails, p.ui.podsTree))
 			p.ui.podsTree.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.namespaceDropDown, p.ui.podsDetails))
-			p.ui.podsDetails.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.podsTree, p.ui.namespaceDropDown))
+			p.ui.podsDetails.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.podsTree, p.ui.buttonBar))
+			p.ui.buttonBar.GetButton(0).SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.podsDetails, nil))
+			p.ui.buttonBar.GetButton(p.ui.buttonBar.GetButtonCount() - 1).SetInputCapture(cycleFocusCapture(p.ui.app, nil, p.ui.namespaceDropDown))
 		})
 
 		return nil
@@ -230,11 +232,15 @@ func cycleFocusCapture(app *tview.Application, prev, next tview.Primitive) func(
 	return func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
-			app.SetFocus(next)
-			return nil
+			if next != nil {
+				app.SetFocus(next)
+				return nil
+			}
 		case tcell.KeyBacktab:
-			app.SetFocus(prev)
-			return nil
+			if prev != nil {
+				app.SetFocus(prev)
+				return nil
+			}
 		}
 		return event
 	}
