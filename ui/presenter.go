@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/gdamore/tcell"
+	"github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
 	"golang.org/x/xerrors"
 )
@@ -120,11 +122,14 @@ func (p *PodsPresenter) populateNamespaces() error {
 	if namespaces, err := p.client.Namespaces(); err == nil {
 		p.ui.app.QueueUpdate(func() {
 			p.ui.namespaceDropDown.SetOptions(namespaces, func(text string, idx int) {
-				log.Println(text, idx)
+				p.populatePods(text)
 			})
 			p.ui.namespaceDropDown.SetCurrentOption(0)
 			p.ui.pages.SwitchToPage(pagePods)
 			p.ui.app.SetFocus(p.ui.namespaceDropDown)
+			p.ui.namespaceDropDown.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.podsDetails, p.ui.podsTree))
+			p.ui.podsTree.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.namespaceDropDown, p.ui.podsDetails))
+			p.ui.podsDetails.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.podsTree, p.ui.namespaceDropDown))
 			p.ui.app.Draw()
 		})
 
@@ -132,5 +137,50 @@ func (p *PodsPresenter) populateNamespaces() error {
 	} else {
 		log.Println("Error getting cluster namespaces:", err)
 		return UserRetryableError{err, p.populateNamespaces}
+	}
+}
+
+func (p *PodsPresenter) populatePods(ns string) error {
+	root := tview.NewTreeNode(".")
+	log.Printf("Getting pod tree for namespace %s", ns)
+	p.ui.podsTree.SetRoot(root).SetCurrentNode(root)
+
+	podTree, err := p.client.PodTree(ns)
+	if err != nil {
+		log.Println("Error getting pod tree for namespaces %s: %s", ns, err)
+		return UserRetryableError{err, func() error {
+			return p.populatePods(ns)
+		}}
+	}
+
+	if len(podTree.Deployments) > 0 {
+		dn := tview.NewTreeNode("Deployments").SetSelectable(true)
+		root.AddChild(dn)
+
+		for _, deployment := range podTree.Deployments {
+			d := tview.NewTreeNode(deployment.GetObjectMeta().GetName()).SetSelectable(true)
+			dn.AddChild(d)
+
+			for _, pod := range deployment.Pods {
+				p := tview.NewTreeNode(pod.GetObjectMeta().GetName()).SetSelectable(true)
+				d.AddChild(p)
+			}
+		}
+	}
+
+	return nil
+}
+
+func cycleFocusCapture(app *tview.Application, prev, next tview.Primitive) func(event *tcell.EventKey) *tcell.EventKey {
+	return func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyTAB:
+			app.SetFocus(next)
+			return nil
+		case tcell.KeyBacktab:
+			app.SetFocus(prev)
+			return nil
+		}
+		return event
 	}
 }
