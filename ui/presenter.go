@@ -27,6 +27,12 @@ type ErrorPresenter struct {
 	ui *UI
 }
 
+const (
+	buttonQuit  = "Quit"
+	buttonClose = "Close"
+	buttonRetry = "Retry"
+)
+
 func (p ErrorPresenter) displayError(err error) bool {
 	if err == nil {
 		p.ui.app.QueueUpdateDraw(func() {
@@ -92,18 +98,13 @@ func (p *MainPresenter) Run() error {
 	go func() {
 		if !p.displayError(p.initClient()) {
 			p.podsPresenter = NewPodsPresenter(p.ui, p.client)
+			p.podsPresenter.initKeybindings()
 			p.displayError(p.podsPresenter.populateNamespaces())
 		}
 	}()
 
 	return p.ui.app.Run()
 }
-
-const (
-	buttonQuit  = "Quit"
-	buttonClose = "Close"
-	buttonRetry = "Retry"
-)
 
 func (p *MainPresenter) initClient() error {
 	var err error
@@ -128,6 +129,17 @@ func NewPodsPresenter(ui *UI, client k8s.Client) *PodsPresenter {
 		ErrorPresenter: ErrorPresenter{ui},
 		client:         client,
 	}
+}
+
+func (p *PodsPresenter) initKeybindings() {
+	p.ui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyF10:
+			p.ui.app.Stop()
+			return nil
+		}
+		return event
+	})
 }
 
 func (p *PodsPresenter) populateNamespaces() error {
@@ -195,7 +207,6 @@ func (p *PodsPresenter) populatePods(ns string) error {
 				}
 			}
 		}
-
 	})
 
 	p.ui.podsTree.SetSelectedFunc(func(node *tview.TreeNode) {
@@ -229,7 +240,7 @@ func cycleFocusCapture(app *tview.Application, prev, next tview.Primitive) func(
 	}
 }
 
-var spinners = [...]string{" ⠋ ", " ⠙ ", " ⠹ ", " ⠸ ", " ⠼ ", " ⠴ ", " ⠦ ", " ⠧ ", " ⠇ ", " ⠏ "}
+var spinners = [...]string{"⠋ ", "⠙ ", "⠹ ", "⠸ ", "⠼ ", "⠴ ", "⠦ ", "⠧ ", "⠇ ", "⠏ "}
 
 func spinText(app *tview.Application, textView *tview.TextView, text string, done <-chan struct{}) {
 	app.QueueUpdateDraw(func() {
