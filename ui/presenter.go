@@ -132,9 +132,13 @@ func NewPodsPresenter(ui *UI, client k8s.Client) *PodsPresenter {
 
 func (p *PodsPresenter) populateNamespaces() error {
 	log.Println("Getting cluster namespaces")
+	done := make(chan struct{})
+	defer close(done)
 	p.ui.app.QueueUpdate(func() {
-		p.ui.pages.ShowPage(pageLoading)
+		p.ui.pages.SwitchToPage(pagePods)
+		spinText(p.ui.app, p.ui.statusBar, "Loading namespaces", done)
 	})
+
 	if namespaces, err := p.client.Namespaces(); err == nil {
 		p.ui.app.QueueUpdateDraw(func() {
 			p.ui.namespaceDropDown.SetOptions(namespaces, func(text string, idx int) {
@@ -146,7 +150,6 @@ func (p *PodsPresenter) populateNamespaces() error {
 				}()
 			})
 			p.ui.namespaceDropDown.SetCurrentOption(0)
-			p.ui.pages.SwitchToPage(pagePods)
 			p.ui.app.SetFocus(p.ui.namespaceDropDown)
 			p.ui.namespaceDropDown.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.podsDetails, p.ui.podsTree))
 			p.ui.podsTree.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.namespaceDropDown, p.ui.podsDetails))
@@ -224,11 +227,11 @@ func cycleFocusCapture(app *tview.Application, prev, next tview.Primitive) func(
 	}
 }
 
-var spinners = [...]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+var spinners = [...]string{" ⠋ ", " ⠙ ", " ⠹ ", " ⠸ ", " ⠼ ", " ⠴ ", " ⠦ ", " ⠧ ", " ⠇ ", " ⠏ "}
 
 func spinText(app *tview.Application, textView *tview.TextView, text string, done <-chan struct{}) {
 	app.QueueUpdateDraw(func() {
-		textView.SetText(spinners[0] + " " + text)
+		textView.SetText(spinners[0] + text)
 	})
 	go func() {
 		i := 1
@@ -242,7 +245,7 @@ func spinText(app *tview.Application, textView *tview.TextView, text string, don
 			case <-time.After(100 * time.Millisecond):
 				spin := i % len(spinners)
 				app.QueueUpdateDraw(func() {
-					textView.SetText(spinners[spin] + " " + text)
+					textView.SetText(spinners[spin] + text)
 				})
 				i++
 			}

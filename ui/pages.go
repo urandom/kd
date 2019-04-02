@@ -5,7 +5,6 @@ import "github.com/rivo/tview"
 const (
 	pageK8sError = "error-k8s"
 	pagePods     = "pods"
-	pageLoading  = "loading"
 )
 
 func (ui *UI) setupPages() {
@@ -16,7 +15,7 @@ func (ui *UI) setupPages() {
 	ui.podsTree.SetBorder(true).SetTitle("Pods")
 	ui.podsDetails = tview.NewTextView().SetWrap(false)
 	ui.podsDetails.SetBorder(true).SetTitle("Details")
-	ui.statusBar = tview.NewTextView()
+	ui.statusBar = tview.NewTextView().SetTextColor(tview.Styles.SecondaryTextColor)
 
 	ui.pages.AddPage(pagePods,
 		tview.NewFlex().
@@ -29,12 +28,6 @@ func (ui *UI) setupPages() {
 				0, 1, true).
 			AddItem(ui.statusBar, 1, 0, false),
 		true, false)
-
-	ui.pages.AddPage(pageLoading, tview.NewGrid().
-		SetColumns(0, 0, 0).
-		SetRows(0, 0, 0).
-		AddItem(tview.NewTextView().
-			SetText("Loading ..."), 1, 1, 1, 1, 0, 0, false), true, false)
 
 	ui.pages.AddPage(pageK8sError, ui.errorModal, true, false)
 
