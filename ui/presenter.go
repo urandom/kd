@@ -9,6 +9,7 @@ import (
 	"github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
 	"golang.org/x/xerrors"
+	yaml "gopkg.in/yaml.v2"
 )
 
 type FatalError struct {
@@ -178,16 +179,32 @@ func (p *PodsPresenter) populatePods(ns string) error {
 			root.AddChild(dn)
 
 			for _, deployment := range podTree.Deployments {
-				d := tview.NewTreeNode(deployment.GetObjectMeta().GetName()).SetSelectable(true)
+				d := tview.NewTreeNode(deployment.GetObjectMeta().GetName()).
+					SetReference(deployment).SetSelectable(true)
 				dn.AddChild(d)
 
 				for _, pod := range deployment.Pods {
-					p := tview.NewTreeNode(pod.GetObjectMeta().GetName()).SetSelectable(true)
+					p := tview.NewTreeNode(pod.GetObjectMeta().GetName()).
+						SetReference(pod).SetSelectable(true)
 					d.AddChild(p)
 				}
 			}
 		}
 
+	})
+
+	p.ui.podsTree.SetSelectedFunc(func(node *tview.TreeNode) {
+		ref := node.GetReference()
+		if ref == nil {
+			node.SetExpanded(!node.IsExpanded())
+			return
+		}
+
+		if data, err := yaml.Marshal(ref); err == nil {
+			p.ui.podsDetails.SetText(string(data))
+		} else {
+			p.ui.podsDetails.SetText(err.Error())
+		}
 	})
 
 	return nil

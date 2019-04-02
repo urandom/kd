@@ -14,7 +14,7 @@ func (ui *UI) setupPages() {
 	ui.namespaceDropDown = tview.NewDropDown().SetLabel("Namespace [Enter[]: ")
 	ui.podsTree = tview.NewTreeView().SetTopLevel(1)
 	ui.podsTree.SetBorder(true).SetTitle("Pods")
-	ui.podsDetails = tview.NewTextView()
+	ui.podsDetails = tview.NewTextView().SetWrap(false)
 	ui.podsDetails.SetBorder(true).SetTitle("Details")
 	ui.statusBar = tview.NewTextView()
 
