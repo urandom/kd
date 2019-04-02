@@ -142,6 +142,7 @@ func (p *PodsPresenter) populateNamespaces() error {
 	if namespaces, err := p.client.Namespaces(); err == nil {
 		p.ui.app.QueueUpdateDraw(func() {
 			p.ui.namespaceDropDown.SetOptions(namespaces, func(text string, idx int) {
+				p.ui.podsTree.SetRoot(tview.NewTreeNode(""))
 				done := make(chan struct{})
 				spinText(p.ui.app, p.ui.statusBar, "Loading pods", done)
 				go func() {
@@ -164,6 +165,7 @@ func (p *PodsPresenter) populateNamespaces() error {
 }
 
 func (p *PodsPresenter) populatePods(ns string) error {
+	log.Printf("Getting pod tree for namespace %s", ns)
 	podTree, err := p.client.PodTree(ns)
 	if err != nil {
 		log.Printf("Error getting pod tree for namespaces %s: %s", ns, err)
@@ -173,8 +175,8 @@ func (p *PodsPresenter) populatePods(ns string) error {
 	}
 
 	p.ui.app.QueueUpdateDraw(func() {
+		log.Printf("Updating tree view with pods for namespaces %s", ns)
 		root := tview.NewTreeNode(".")
-		log.Printf("Getting pod tree for namespace %s", ns)
 		p.ui.podsTree.SetRoot(root).SetCurrentNode(root)
 
 		if len(podTree.Deployments) > 0 {
