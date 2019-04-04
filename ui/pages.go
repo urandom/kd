@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/rivo/tview"
+import (
+	"fmt"
+
+	"github.com/rivo/tview"
+)
 
 const (
 	pageK8sError = "error-k8s"
@@ -18,13 +22,13 @@ func (ui *UI) setupPages() {
 	ui.statusBar = tview.NewTextView().SetTextColor(tview.Styles.SecondaryTextColor).SetWrap(false)
 	ui.statusBar.SetBorderPadding(0, 0, 1, 1)
 	ui.buttonBar = tview.NewForm().
-		AddButton("      ", nil).
-		AddButton("      ", nil).
-		AddButton("      ", nil).
-		AddButton("      ", nil).
-		AddButton("      ", nil).
-		AddButton("      ", nil).
-		AddButton("[black]10[maroon]Quit", func() { ui.app.Stop() })
+		AddButton(buttonEmpty, nil).
+		AddButton(buttonEmpty, nil).
+		AddButton(buttonEmpty, nil).
+		AddButton(buttonEmpty, nil).
+		AddButton(buttonEmpty, nil).
+		AddButton(buttonEmpty, nil).
+		AddButton(buttonLabel("10", buttonQuit), func() { ui.app.Stop() })
 	ui.buttonBar.SetBorder(false).SetBorderPadding(0, 0, 0, 0)
 
 	ui.pages.AddPage(pagePods,
@@ -42,4 +46,8 @@ func (ui *UI) setupPages() {
 
 	ui.pages.AddPage(pageK8sError, ui.errorModal, true, false)
 
+}
+
+func buttonLabel(number, text string) string {
+	return fmt.Sprintf("[black]%s[maroon]%s", number, text)
 }

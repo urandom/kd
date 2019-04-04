@@ -27,12 +27,15 @@ type ErrorPresenter struct {
 	ui *UI
 
 	isModalVisible bool
+	focused        tview.Primitive
 }
 
 const (
-	buttonQuit  = "Quit"
-	buttonClose = "Close"
-	buttonRetry = "Retry"
+	buttonQuit    = "Quit"
+	buttonClose   = "Close"
+	buttonRetry   = "Retry"
+	buttonRefresh = "Refre"
+	buttonEmpty   = "      "
 )
 
 func (p *ErrorPresenter) displayError(err error) bool {
@@ -66,18 +69,19 @@ func (p *ErrorPresenter) displayError(err error) bool {
 				switch label {
 				case buttonQuit:
 					p.ui.app.Stop()
-				case buttonClose:
-					p.isModalVisible = false
-					p.ui.pages.HidePage(pageK8sError)
 				case buttonRetry:
-					p.isModalVisible = false
-					p.ui.pages.HidePage(pageK8sError)
 					go func() {
 						p.displayError(err.(UserRetryableError).RetryOp())
 					}()
+					fallthrough
+				case buttonClose:
+					p.isModalVisible = false
+					p.ui.pages.HidePage(pageK8sError)
+					p.ui.app.SetFocus(p.focused)
 				}
 			})
 		p.isModalVisible = true
+		p.focused = p.ui.app.GetFocus()
 		p.ui.pages.ShowPage(pageK8sError)
 		p.ui.app.SetFocus(p.ui.errorModal)
 	})
@@ -131,6 +135,7 @@ const (
 	podsNamespace podsComponent = iota
 	podsTree
 	podsDetails
+	podsButtons
 )
 
 type PodsPresenter struct {
@@ -153,6 +158,9 @@ func NewPodsPresenter(ui *UI, client k8s.Client) *PodsPresenter {
 func (p *PodsPresenter) initKeybindings() {
 	p.ui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
+		case tcell.KeyF5:
+			p.refreshFocused()
+			return nil
 		case tcell.KeyF10:
 			p.ui.app.Stop()
 			return nil
@@ -173,16 +181,26 @@ func (p *PodsPresenter) populateNamespaces() error {
 	if namespaces, err := p.client.Namespaces(); err == nil {
 		p.ui.app.QueueUpdateDraw(func() {
 			p.ui.namespaceDropDown.SetOptions(namespaces, func(text string, idx int) {
-				p.ui.podsTree.SetRoot(tview.NewTreeNode(""))
-				done := make(chan struct{})
-				spinText(p.ui.app, p.ui.statusBar, "Loading pods", done)
+				if text == p.state.namespace {
+					return
+				}
 				go func() {
 					p.displayError(p.populatePods(text))
-					close(done)
 				}()
 			})
-			p.ui.namespaceDropDown.SetCurrentOption(0)
+			found := false
+			for i := range namespaces {
+				if namespaces[i] == p.state.namespace {
+					p.ui.namespaceDropDown.SetCurrentOption(i)
+					found = true
+					break
+				}
+			}
+			if !found {
+				p.ui.namespaceDropDown.SetCurrentOption(0)
+			}
 			p.ui.app.SetFocus(p.ui.namespaceDropDown)
+			p.onFocused(p.ui.namespaceDropDown)
 			p.state.activeComponent = podsNamespace
 
 			p.cycleFocusCapture(p.ui.namespaceDropDown, p.ui.podsDetails, p.ui.podsTree)
@@ -204,10 +222,17 @@ type InputCapturer interface {
 }
 
 func (p *PodsPresenter) cycleFocusCapture(on InputCapturer, prev, next tview.Primitive) {
-	on.SetInputCapture(cycleFocusCapture(p.ui.app, prev, next))
+	on.SetInputCapture(cycleFocusCapture(p.ui.app, prev, next, p.onFocused))
 }
 
 func (p *PodsPresenter) populatePods(ns string) error {
+	done := make(chan struct{})
+	p.ui.app.QueueUpdateDraw(func() {
+		p.ui.podsTree.SetRoot(tview.NewTreeNode(""))
+		spinText(p.ui.app, p.ui.statusBar, "Loading pods", done)
+	})
+	defer close(done)
+
 	log.Printf("Getting pod tree for namespace %s", ns)
 	podTree, err := p.client.PodTree(ns)
 	if err != nil {
@@ -217,6 +242,7 @@ func (p *PodsPresenter) populatePods(ns string) error {
 		}}
 	}
 
+	p.state.namespace = ns
 	p.ui.app.QueueUpdateDraw(func() {
 		log.Printf("Updating tree view with pods for namespaces %s", ns)
 		root := tview.NewTreeNode(".")
@@ -257,21 +283,93 @@ func (p *PodsPresenter) populatePods(ns string) error {
 	return nil
 }
 
-func cycleFocusCapture(app *tview.Application, prev, next tview.Primitive) func(event *tcell.EventKey) *tcell.EventKey {
+func (p *PodsPresenter) onFocused(primitive tview.Primitive) {
+	p.state.activeComponent = primitiveToComponent(primitive)
+
+	p.resetButtons()
+	switch p.state.activeComponent {
+	case podsNamespace:
+		p.buttonsForNamespaceView()
+	case podsTree:
+		p.buttonsForTreeView()
+	case podsDetails:
+	}
+}
+
+func (p PodsPresenter) resetButtons() {
+	for i := 0; i < p.ui.buttonBar.GetButtonCount()-1; i++ {
+		p.ui.buttonBar.GetButton(i).SetLabel(buttonEmpty)
+	}
+}
+
+func (p *PodsPresenter) buttonsForNamespaceView() {
+	for i := 0; i < p.ui.buttonBar.GetButtonCount()-1; i++ {
+		button := p.ui.buttonBar.GetButton(i)
+		switch i {
+		case 4:
+			button.
+				SetLabel(buttonLabel("5", buttonRefresh)).
+				SetSelectedFunc(p.refreshFocused)
+		}
+	}
+}
+
+func (p *PodsPresenter) buttonsForTreeView() {
+	for i := 0; i < p.ui.buttonBar.GetButtonCount()-1; i++ {
+		button := p.ui.buttonBar.GetButton(i)
+		switch i {
+		case 4:
+			button.
+				SetLabel(buttonLabel("5", buttonRefresh)).
+				SetSelectedFunc(p.refreshFocused)
+		}
+	}
+}
+
+func (p *PodsPresenter) refreshFocused() {
+	switch p.state.activeComponent {
+	case podsNamespace:
+		go func() {
+			p.displayError(p.populateNamespaces())
+		}()
+	case podsTree:
+		go func() {
+			p.displayError(p.populatePods(p.state.namespace))
+		}()
+	case podsDetails:
+	}
+}
+
+func cycleFocusCapture(app *tview.Application, prev, next tview.Primitive, focused func(p tview.Primitive)) func(event *tcell.EventKey) *tcell.EventKey {
 	return func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab:
 			if next != nil {
 				app.SetFocus(next)
+				focused(next)
 				return nil
 			}
 		case tcell.KeyBacktab:
 			if prev != nil {
 				app.SetFocus(prev)
+				focused(prev)
 				return nil
 			}
 		}
 		return event
+	}
+}
+
+func primitiveToComponent(p tview.Primitive) podsComponent {
+	switch p.(type) {
+	case *tview.DropDown:
+		return podsNamespace
+	case *tview.TreeView:
+		return podsTree
+	case *tview.TextView:
+		return podsDetails
+	default:
+		return podsButtons
 	}
 }
 
