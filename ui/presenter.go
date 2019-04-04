@@ -25,6 +25,8 @@ type ClientFactory func() (k8s.Client, error)
 
 type ErrorPresenter struct {
 	ui *UI
+
+	isModalVisible bool
 }
 
 const (
@@ -33,11 +35,13 @@ const (
 	buttonRetry = "Retry"
 )
 
-func (p ErrorPresenter) displayError(err error) bool {
+func (p *ErrorPresenter) displayError(err error) bool {
 	if err == nil {
-		p.ui.app.QueueUpdateDraw(func() {
-			p.ui.pages.HidePage(pageK8sError)
-		})
+		if p.isModalVisible {
+			p.ui.app.QueueUpdateDraw(func() {
+				p.ui.pages.HidePage(pageK8sError)
+			})
+		}
 		return false
 	}
 
@@ -63,14 +67,17 @@ func (p ErrorPresenter) displayError(err error) bool {
 				case buttonQuit:
 					p.ui.app.Stop()
 				case buttonClose:
+					p.isModalVisible = false
 					p.ui.pages.HidePage(pageK8sError)
 				case buttonRetry:
+					p.isModalVisible = false
 					p.ui.pages.HidePage(pageK8sError)
 					go func() {
 						p.displayError(err.(UserRetryableError).RetryOp())
 					}()
 				}
 			})
+		p.isModalVisible = true
 		p.ui.pages.ShowPage(pageK8sError)
 		p.ui.app.SetFocus(p.ui.errorModal)
 	})
@@ -79,7 +86,7 @@ func (p ErrorPresenter) displayError(err error) bool {
 }
 
 type MainPresenter struct {
-	ErrorPresenter
+	*ErrorPresenter
 
 	clientFactory ClientFactory
 
@@ -89,7 +96,7 @@ type MainPresenter struct {
 
 func NewMainPresenter(ui *UI, clientFactory ClientFactory) *MainPresenter {
 	return &MainPresenter{
-		ErrorPresenter: ErrorPresenter{ui: ui},
+		ErrorPresenter: &ErrorPresenter{ui: ui},
 		clientFactory:  clientFactory,
 	}
 }
@@ -118,15 +125,27 @@ func (p *MainPresenter) initClient() error {
 	return nil
 }
 
+type podsComponent int
+
+const (
+	podsNamespace podsComponent = iota
+	podsTree
+	podsDetails
+)
+
 type PodsPresenter struct {
-	ErrorPresenter
+	*ErrorPresenter
 
 	client k8s.Client
+	state  struct {
+		activeComponent podsComponent
+		namespace       string
+	}
 }
 
 func NewPodsPresenter(ui *UI, client k8s.Client) *PodsPresenter {
 	return &PodsPresenter{
-		ErrorPresenter: ErrorPresenter{ui},
+		ErrorPresenter: &ErrorPresenter{ui: ui},
 		client:         client,
 	}
 }
@@ -164,11 +183,13 @@ func (p *PodsPresenter) populateNamespaces() error {
 			})
 			p.ui.namespaceDropDown.SetCurrentOption(0)
 			p.ui.app.SetFocus(p.ui.namespaceDropDown)
-			p.ui.namespaceDropDown.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.podsDetails, p.ui.podsTree))
-			p.ui.podsTree.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.namespaceDropDown, p.ui.podsDetails))
-			p.ui.podsDetails.SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.podsTree, p.ui.buttonBar))
-			p.ui.buttonBar.GetButton(0).SetInputCapture(cycleFocusCapture(p.ui.app, p.ui.podsDetails, nil))
-			p.ui.buttonBar.GetButton(p.ui.buttonBar.GetButtonCount() - 1).SetInputCapture(cycleFocusCapture(p.ui.app, nil, p.ui.namespaceDropDown))
+			p.state.activeComponent = podsNamespace
+
+			p.cycleFocusCapture(p.ui.namespaceDropDown, p.ui.podsDetails, p.ui.podsTree)
+			p.cycleFocusCapture(p.ui.podsTree, p.ui.namespaceDropDown, p.ui.podsDetails)
+			p.cycleFocusCapture(p.ui.podsDetails, p.ui.podsTree, p.ui.buttonBar)
+			p.cycleFocusCapture(p.ui.buttonBar.GetButton(0), p.ui.podsDetails, nil)
+			p.cycleFocusCapture(p.ui.buttonBar.GetButton(p.ui.buttonBar.GetButtonCount()-1), nil, p.ui.namespaceDropDown)
 		})
 
 		return nil
@@ -176,6 +197,14 @@ func (p *PodsPresenter) populateNamespaces() error {
 		log.Println("Error getting cluster namespaces:", err)
 		return UserRetryableError{err, p.populateNamespaces}
 	}
+}
+
+type InputCapturer interface {
+	SetInputCapture(capture func(event *tcell.EventKey) *tcell.EventKey) *tview.Box
+}
+
+func (p *PodsPresenter) cycleFocusCapture(on InputCapturer, prev, next tview.Primitive) {
+	on.SetInputCapture(cycleFocusCapture(p.ui.app, prev, next))
 }
 
 func (p *PodsPresenter) populatePods(ns string) error {

@@ -30,11 +30,11 @@ func (ui *UI) setupPages() {
 	ui.pages.AddPage(pagePods,
 		tview.NewFlex().
 			SetDirection(tview.FlexRow).
-			AddItem(ui.namespaceDropDown, 1, 0, true).
+			AddItem(ui.namespaceDropDown, 1, 0, false).
 			AddItem(
 				tview.NewFlex().
-					AddItem(ui.podsTree, 0, 1, true).
-					AddItem(ui.podsDetails, 0, 1, true),
+					AddItem(ui.podsTree, 0, 1, false).
+					AddItem(ui.podsDetails, 0, 1, false),
 				0, 1, true).
 			AddItem(ui.statusBar, 1, 0, false).
 			AddItem(ui.buttonBar, 1, 0, false),
