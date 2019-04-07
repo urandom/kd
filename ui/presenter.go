@@ -246,7 +246,7 @@ func (p *PodsPresenter) populatePods(ns string) error {
 	p.ui.app.QueueUpdateDraw(func() {
 		log.Printf("Updating tree view with pods for namespaces %s", ns)
 		root := tview.NewTreeNode(".")
-		p.ui.podsTree.SetRoot(root).SetCurrentNode(root)
+		p.ui.podsTree.SetRoot(root)
 
 		if len(podTree.Deployments) > 0 {
 			dn := tview.NewTreeNode("Deployments").SetSelectable(true)
@@ -263,6 +263,10 @@ func (p *PodsPresenter) populatePods(ns string) error {
 					d.AddChild(p)
 				}
 			}
+		}
+
+		if len(root.GetChildren()) > 0 {
+			p.ui.podsTree.SetCurrentNode(root.GetChildren()[0])
 		}
 	})
 
