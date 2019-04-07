@@ -3,13 +3,13 @@ package ui
 import (
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
 	"golang.org/x/xerrors"
 	yaml "gopkg.in/yaml.v2"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type FatalError struct {
@@ -138,6 +138,13 @@ const (
 	podsButtons
 )
 
+type detailsView int
+
+const (
+	detailsObject detailsView = iota
+	detailsEvents
+)
+
 type PodsPresenter struct {
 	*ErrorPresenter
 
@@ -145,6 +152,8 @@ type PodsPresenter struct {
 	state  struct {
 		activeComponent podsComponent
 		namespace       string
+		object          meta.Object
+		details         detailsView
 	}
 }
 
@@ -158,6 +167,11 @@ func NewPodsPresenter(ui *UI, client k8s.Client) *PodsPresenter {
 func (p *PodsPresenter) initKeybindings() {
 	p.ui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
+		case tcell.KeyF2:
+			if p.state.activeComponent == podsDetails {
+				p.showEvents()
+				return nil
+			}
 		case tcell.KeyF5:
 			p.refreshFocused()
 			return nil
@@ -171,11 +185,10 @@ func (p *PodsPresenter) initKeybindings() {
 
 func (p *PodsPresenter) populateNamespaces() error {
 	log.Println("Getting cluster namespaces")
-	done := make(chan struct{})
-	defer close(done)
+	defer p.ui.statusBar.StopSpin()
 	p.ui.app.QueueUpdate(func() {
 		p.ui.pages.SwitchToPage(pagePods)
-		spinText(p.ui.app, p.ui.statusBar, "Loading namespaces", done)
+		p.ui.statusBar.SpinText("Loading namespaces", p.ui.app)
 	})
 
 	if namespaces, err := p.client.Namespaces(); err == nil {
@@ -185,7 +198,7 @@ func (p *PodsPresenter) populateNamespaces() error {
 					return
 				}
 				go func() {
-					p.displayError(p.populatePods(text))
+					p.displayError(p.populatePods(text, true))
 				}()
 			})
 			found := false
@@ -223,20 +236,19 @@ func (p *PodsPresenter) cycleFocusCapture(on InputCapturer, prev, next tview.Pri
 	on.SetInputCapture(cycleFocusCapture(p.ui.app, prev, next, p.onFocused))
 }
 
-func (p *PodsPresenter) populatePods(ns string) error {
-	done := make(chan struct{})
+func (p *PodsPresenter) populatePods(ns string, clear bool) error {
+	defer p.ui.statusBar.StopSpin()
 	p.ui.app.QueueUpdateDraw(func() {
 		p.ui.podsTree.SetRoot(tview.NewTreeNode(""))
-		spinText(p.ui.app, p.ui.statusBar, "Loading pods", done)
+		p.ui.statusBar.SpinText("Loading pods", p.ui.app)
 	})
-	defer close(done)
 
 	log.Printf("Getting pod tree for namespace %s", ns)
 	podTree, err := p.client.PodTree(ns)
 	if err != nil {
 		log.Printf("Error getting pod tree for namespaces %s: %s", ns, err)
 		return UserRetryableError{err, func() error {
-			return p.populatePods(ns)
+			return p.populatePods(ns, clear)
 		}}
 	}
 
@@ -275,6 +287,7 @@ func (p *PodsPresenter) populatePods(ns string) error {
 			return
 		}
 
+		p.state.object = ref.(meta.Object)
 		if data, err := yaml.Marshal(ref); err == nil {
 			p.ui.podsDetails.SetText(string(data))
 		} else {
@@ -314,7 +327,11 @@ func (p *PodsPresenter) buttonsForPodsTree() {
 }
 
 func (p *PodsPresenter) buttonsForPodsDetails() {
+	p.ui.actionBar.AddAction(2, "Events")
 	p.ui.actionBar.AddAction(10, "Quit")
+}
+
+func (p *PodsPresenter) showEvents() {
 }
 
 func (p *PodsPresenter) refreshFocused() {
@@ -325,7 +342,7 @@ func (p *PodsPresenter) refreshFocused() {
 		}()
 	case podsTree:
 		go func() {
-			p.displayError(p.populatePods(p.state.namespace))
+			p.displayError(p.populatePods(p.state.namespace, false))
 		}()
 	case podsDetails:
 	}
@@ -362,30 +379,4 @@ func primitiveToComponent(p tview.Primitive) podsComponent {
 	default:
 		return podsButtons
 	}
-}
-
-var spinners = [...]string{"⠋ ", "⠙ ", "⠹ ", "⠸ ", "⠼ ", "⠴ ", "⠦ ", "⠧ ", "⠇ ", "⠏ "}
-
-func spinText(app *tview.Application, textView *tview.TextView, text string, done <-chan struct{}) {
-	app.QueueUpdateDraw(func() {
-		textView.SetText(spinners[0] + text)
-	})
-	go func() {
-		i := 1
-		for {
-			select {
-			case <-done:
-				app.QueueUpdateDraw(func() {
-					textView.SetText("")
-				})
-				return
-			case <-time.After(100 * time.Millisecond):
-				spin := i % len(spinners)
-				app.QueueUpdateDraw(func() {
-					textView.SetText(spinners[spin] + text)
-				})
-				i++
-			}
-		}
-	}()
 }

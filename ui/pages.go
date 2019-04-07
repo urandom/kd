@@ -17,8 +17,7 @@ func (ui *UI) setupPages() {
 	ui.podsTree.SetBorder(true).SetTitle("Pods")
 	ui.podsDetails = tview.NewTextView().SetWrap(false)
 	ui.podsDetails.SetBorder(true).SetTitle("Details")
-	ui.statusBar = tview.NewTextView().SetTextColor(tview.Styles.SecondaryTextColor).SetWrap(false)
-	ui.statusBar.SetBorderPadding(0, 0, 1, 1)
+	ui.statusBar = NewStatusBar()
 	ui.actionBar = NewActionBar()
 
 	ui.pages.AddPage(pagePods,

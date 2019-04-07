@@ -11,7 +11,7 @@ type UI struct {
 	namespaceDropDown *tview.DropDown
 	podsTree          *tview.TreeView
 	podsDetails       *tview.TextView
-	statusBar         *tview.TextView
+	statusBar         StatusBar
 	actionBar         ActionBar
 }
 
