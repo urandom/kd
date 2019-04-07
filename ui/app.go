@@ -12,7 +12,7 @@ type UI struct {
 	podsTree          *tview.TreeView
 	podsDetails       *tview.TextView
 	statusBar         *tview.TextView
-	buttonBar         *tview.Form
+	actionBar         ActionBar
 }
 
 func New() *UI {

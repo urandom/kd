@@ -205,9 +205,7 @@ func (p *PodsPresenter) populateNamespaces() error {
 
 			p.cycleFocusCapture(p.ui.namespaceDropDown, p.ui.podsDetails, p.ui.podsTree)
 			p.cycleFocusCapture(p.ui.podsTree, p.ui.namespaceDropDown, p.ui.podsDetails)
-			p.cycleFocusCapture(p.ui.podsDetails, p.ui.podsTree, p.ui.buttonBar)
-			p.cycleFocusCapture(p.ui.buttonBar.GetButton(0), p.ui.podsDetails, nil)
-			p.cycleFocusCapture(p.ui.buttonBar.GetButton(p.ui.buttonBar.GetButtonCount()-1), nil, p.ui.namespaceDropDown)
+			p.cycleFocusCapture(p.ui.podsDetails, p.ui.podsTree, p.ui.namespaceDropDown)
 		})
 
 		return nil
@@ -293,41 +291,30 @@ func (p *PodsPresenter) onFocused(primitive tview.Primitive) {
 	p.resetButtons()
 	switch p.state.activeComponent {
 	case podsNamespace:
-		p.buttonsForNamespaceView()
+		p.buttonsForNamespaces()
 	case podsTree:
-		p.buttonsForTreeView()
+		p.buttonsForPodsTree()
 	case podsDetails:
+		p.buttonsForPodsDetails()
 	}
 }
 
 func (p PodsPresenter) resetButtons() {
-	for i := 0; i < p.ui.buttonBar.GetButtonCount()-1; i++ {
-		p.ui.buttonBar.GetButton(i).SetLabel(buttonEmpty)
-	}
+	p.ui.actionBar.Clear()
 }
 
-func (p *PodsPresenter) buttonsForNamespaceView() {
-	for i := 0; i < p.ui.buttonBar.GetButtonCount()-1; i++ {
-		button := p.ui.buttonBar.GetButton(i)
-		switch i {
-		case 4:
-			button.
-				SetLabel(buttonLabel("5", buttonRefresh)).
-				SetSelectedFunc(p.refreshFocused)
-		}
-	}
+func (p *PodsPresenter) buttonsForNamespaces() {
+	p.ui.actionBar.AddAction(5, "Refresh")
+	p.ui.actionBar.AddAction(10, "Quit")
 }
 
-func (p *PodsPresenter) buttonsForTreeView() {
-	for i := 0; i < p.ui.buttonBar.GetButtonCount()-1; i++ {
-		button := p.ui.buttonBar.GetButton(i)
-		switch i {
-		case 4:
-			button.
-				SetLabel(buttonLabel("5", buttonRefresh)).
-				SetSelectedFunc(p.refreshFocused)
-		}
-	}
+func (p *PodsPresenter) buttonsForPodsTree() {
+	p.ui.actionBar.AddAction(5, "Refresh")
+	p.ui.actionBar.AddAction(10, "Quit")
+}
+
+func (p *PodsPresenter) buttonsForPodsDetails() {
+	p.ui.actionBar.AddAction(10, "Quit")
 }
 
 func (p *PodsPresenter) refreshFocused() {
