@@ -10,7 +10,9 @@ type UI struct {
 	errorModal        *tview.Modal
 	namespaceDropDown *tview.DropDown
 	podsTree          *tview.TreeView
-	podsDetails       *tview.TextView
+	podsDetails       *tview.Flex
+	podData           *tview.TextView
+	podEvents         *tview.Table
 	statusBar         StatusBar
 	actionBar         ActionBar
 }

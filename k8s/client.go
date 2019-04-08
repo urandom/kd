@@ -78,17 +78,17 @@ func (c Client) Namespaces() ([]string, error) {
 	return namespaces, nil
 }
 
-func (c Client) Events(obj meta.Object) (*cv1.EventList, error) {
+func (c Client) Events(obj meta.ObjectMeta) ([]cv1.Event, error) {
 	name, ns := obj.GetName(), obj.GetNamespace()
 	core := c.CoreV1()
-	events := core.Events(obj.GetNamespace())
+	events := core.Events(ns)
 	selector := events.GetFieldSelector(&name, &ns, nil, nil)
 	opts := meta.ListOptions{FieldSelector: selector.String()}
 	list, err := events.List(opts)
 	if err != nil {
-		err = xerrors.Errorf("getting list of events for object %s: %w", obj.GetName(), err)
+		err = xerrors.Errorf("getting list of events for object %s: %w", name, err)
 	}
-	return list, err
+	return list.Items, err
 }
 
 func (c Client) PodTree(nsName string) (PodTree, error) {

@@ -1,6 +1,8 @@
 module github.com/urandom/kd
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.3.3 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gdamore/tcell v1.1.1
 	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c // indirect
@@ -13,9 +15,10 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
-	github.com/rivo/tview v0.0.0-20190324182152-8a9e26fab0ff
+	github.com/rivo/tview v0.0.0-20190406182340-90b4da1bd64c
 	github.com/rivo/uniseg v0.0.0-20190313204849-f699dde9c340 // indirect
 	github.com/spf13/pflag v1.0.3 // indirect
+	github.com/stretchr/testify v1.3.0 // indirect
 	golang.org/x/crypto v0.0.0-20190225124518-7f87c0fbb88b // indirect
 	golang.org/x/net v0.0.0-20190225153610-fe579d43d832 // indirect
 	golang.org/x/oauth2 v0.0.0-20190220154721-9b3c75971fc9 // indirect
@@ -24,8 +27,8 @@ require (
 	golang.org/x/xerrors v0.0.0-20190315151331-d61658bd2e18
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.2.2
-	k8s.io/api v0.0.0-20190223133432-e3eb7cb1f683
-	k8s.io/apimachinery v0.0.0-20190223094358-dcb391cde5ca
+	k8s.io/api v0.0.0-20190222213804-5cb15d344471
+	k8s.io/apimachinery v0.0.0-20190221213512-86fb29eff628
 	k8s.io/client-go v10.0.0+incompatible
 	k8s.io/klog v0.2.0 // indirect
 	sigs.k8s.io/yaml v1.1.0 // indirect

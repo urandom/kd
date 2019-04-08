@@ -15,8 +15,11 @@ func (ui *UI) setupPages() {
 	ui.namespaceDropDown = tview.NewDropDown().SetLabel("Namespace [Enter[]: ")
 	ui.podsTree = tview.NewTreeView().SetTopLevel(1)
 	ui.podsTree.SetBorder(true).SetTitle("Pods")
-	ui.podsDetails = tview.NewTextView().SetWrap(false)
-	ui.podsDetails.SetBorder(true).SetTitle("Details")
+	ui.podsDetails = tview.NewFlex()
+	ui.podData = tview.NewTextView().SetWrap(false)
+	ui.podData.SetBorder(true).SetTitle("Details")
+	ui.podEvents = tview.NewTable().SetBorders(true)
+	ui.podEvents.SetBorder(true).SetTitle("Events")
 	ui.statusBar = NewStatusBar()
 	ui.actionBar = NewActionBar()
 
@@ -27,7 +30,7 @@ func (ui *UI) setupPages() {
 			AddItem(
 				tview.NewFlex().
 					AddItem(ui.podsTree, 0, 1, false).
-					AddItem(ui.podsDetails, 0, 1, false),
+					AddItem(ui.podsDetails.AddItem(ui.podData, 0, 1, false), 0, 1, false),
 				0, 1, true).
 			AddItem(ui.statusBar, 1, 0, false).
 			AddItem(ui.actionBar, 1, 0, false),
