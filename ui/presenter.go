@@ -306,7 +306,6 @@ func (p *PodsPresenter) showDetails(object interface{}) {
 		} else {
 			p.ui.podData.SetText(err.Error())
 		}
-		p.ui.app.SetFocus(p.ui.podData)
 	})
 }
 
@@ -381,7 +380,6 @@ func (p *PodsPresenter) showEvents(object interface{}) error {
 						tview.NewTableCell(strings.TrimSpace(event.Message)))
 				}
 			}
-			p.ui.app.SetFocus(p.ui.podData)
 		}
 	})
 
@@ -403,12 +401,14 @@ func (p *PodsPresenter) initKeybindings() {
 	p.ui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyF1:
+			p.ui.app.SetFocus(p.ui.podData)
 			if p.state.activeComponent == podsDetails && p.state.object != nil {
 				go p.showDetails(p.state.object)
 				return nil
 			}
 		case tcell.KeyF2:
 			if p.state.activeComponent == podsDetails && p.state.object != nil {
+				p.ui.app.SetFocus(p.ui.podEvents)
 				go func() {
 					p.displayError(p.showEvents(p.state.object))
 				}()
