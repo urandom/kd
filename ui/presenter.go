@@ -306,6 +306,7 @@ func (p *PodsPresenter) showDetails(object interface{}) {
 		} else {
 			p.ui.podData.SetText(err.Error())
 		}
+		p.ui.app.SetFocus(p.ui.podData)
 	})
 }
 
@@ -339,8 +340,8 @@ func (p *PodsPresenter) showEvents(object interface{}) error {
 			headers = append(headers, "Type", "Reason", "Age", "From", "Message")
 		}
 
-		for _, h := range headers {
-			p.ui.podEvents.SetCell(0, 0, tview.NewTableCell(h).
+		for i, h := range headers {
+			p.ui.podEvents.SetCell(0, i, tview.NewTableCell(h).
 				SetAlign(tview.AlignCenter).
 				SetTextColor(tcell.ColorYellow))
 
@@ -380,7 +381,7 @@ func (p *PodsPresenter) showEvents(object interface{}) error {
 						tview.NewTableCell(strings.TrimSpace(event.Message)))
 				}
 			}
-			log.Println(event)
+			p.ui.app.SetFocus(p.ui.podData)
 		}
 	})
 
