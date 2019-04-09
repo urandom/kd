@@ -16,7 +16,7 @@ func (ui *UI) setupPages() {
 	ui.podsTree = tview.NewTreeView().SetTopLevel(1)
 	ui.podsTree.SetBorder(true).SetTitle("Pods")
 	ui.podsDetails = tview.NewFlex()
-	ui.podData = tview.NewTextView().SetWrap(false)
+	ui.podData = tview.NewTextView().SetWrap(false).SetDynamicColors(true)
 	ui.podData.SetBorder(true).SetTitle("Details")
 	ui.podEvents = tview.NewTable().SetBorders(true)
 	ui.podEvents.SetBorder(true).SetTitle("Events")

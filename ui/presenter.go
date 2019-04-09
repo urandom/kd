@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"reflect"
 	"strings"
@@ -13,6 +14,8 @@ import (
 	"github.com/urandom/kd/k8s"
 	"golang.org/x/xerrors"
 	yaml "gopkg.in/yaml.v2"
+	av1 "k8s.io/api/apps/v1"
+	cv1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/duration"
 )
@@ -159,6 +162,7 @@ type PodsPresenter struct {
 		namespace       string
 		object          interface{}
 		details         detailsView
+		fullscreen      bool
 	}
 }
 
@@ -301,12 +305,53 @@ func (p *PodsPresenter) showDetails(object interface{}) {
 	p.state.details = detailsObject
 	p.ui.app.QueueUpdateDraw(func() {
 		p.setDetailsView()
+		p.ui.podData.SetText("")
 		if data, err := yaml.Marshal(object); err == nil {
-			p.ui.podData.SetText(string(data))
+			fmt.Fprint(p.ui.podData, "[greenyellow::b]Summary\n=======\n\n")
+			p.printObjectSummary(p.ui.podData, object)
+			fmt.Fprint(p.ui.podData, "[greenyellow::b]Object\n======\n\n")
+			fmt.Fprint(p.ui.podData, string(data))
 		} else {
 			p.ui.podData.SetText(err.Error())
 		}
 	})
+}
+
+func (p *PodsPresenter) printObjectSummary(w io.Writer, object interface{}) {
+	switch v := object.(type) {
+	case cv1.Pod:
+		total := len(v.Status.ContainerStatuses)
+		ready := 0
+		var restarts int32
+		var lastRestart time.Time
+		for _, cs := range v.Status.ContainerStatuses {
+			if cs.Ready {
+				ready += 1
+			}
+			restarts += cs.RestartCount
+			if cs.LastTerminationState.Terminated != nil {
+				if cs.LastTerminationState.Terminated.FinishedAt.Time.After(lastRestart) {
+					lastRestart = cs.LastTerminationState.Terminated.FinishedAt.Time
+				}
+			}
+		}
+		fmt.Fprintf(w, "[skyblue::b]Ready:[white::-] %d/%d\n", ready, total)
+		fmt.Fprintf(w, "[skyblue::b]Status:[white::-] %s\n", v.Status.Phase)
+		fmt.Fprintf(w, "[skyblue::b]Restarts:[white::-] %d\n", restarts)
+		if !lastRestart.IsZero() {
+			fmt.Fprintf(w, "[skyblue::b]\tLast restart:[white::-] %s\n", duration.HumanDuration(time.Since(lastRestart)))
+		}
+		fmt.Fprintf(w, "[skyblue::b]Age:[white::-] %s\n", duration.HumanDuration(time.Since(v.Status.StartTime.Time)))
+	case av1.Deployment:
+		replicas := v.Status.Replicas
+		fmt.Fprintf(w, "[skyblue::b]Ready:[white::-] %d/%d\n", v.Status.ReadyReplicas, replicas)
+		fmt.Fprintf(w, "[skyblue::b]Up-to-date:[white::-] %d/%d\n", v.Status.UpdatedReplicas, replicas)
+		fmt.Fprintf(w, "[skyblue::b]Available:[white::-] %d\n", v.Status.AvailableReplicas)
+		fmt.Fprintf(w, "[skyblue::b]Age:[white::-] %s\n", duration.HumanDuration(time.Since(v.ObjectMeta.CreationTimestamp.Time)))
+	default:
+		fmt.Fprintf(w, "[skyblue::b]Type:[::] %T\n", v)
+	}
+	fmt.Fprintln(w, "")
 }
 
 func (p *PodsPresenter) showEvents(object interface{}) error {
@@ -402,12 +447,16 @@ func (p *PodsPresenter) initKeybindings() {
 		switch event.Key() {
 		case tcell.KeyF1:
 			p.ui.app.SetFocus(p.ui.podData)
-			if p.state.activeComponent == podsDetails && p.state.object != nil {
+			if (p.state.activeComponent == podsDetails ||
+				p.state.activeComponent == podsTree) &&
+				p.state.object != nil {
 				go p.showDetails(p.state.object)
 				return nil
 			}
 		case tcell.KeyF2:
-			if p.state.activeComponent == podsDetails && p.state.object != nil {
+			if (p.state.activeComponent == podsDetails ||
+				p.state.activeComponent == podsTree) &&
+				p.state.object != nil {
 				p.ui.app.SetFocus(p.ui.podEvents)
 				go func() {
 					p.displayError(p.showEvents(p.state.object))
@@ -420,6 +469,11 @@ func (p *PodsPresenter) initKeybindings() {
 		case tcell.KeyF10:
 			p.ui.app.Stop()
 			return nil
+		case tcell.KeyCtrlF:
+			if p.state.activeComponent == podsDetails {
+				p.state.fullscreen = !p.state.fullscreen
+				p.ui.podsDetails.SetFullScreen(p.state.fullscreen)
+			}
 		}
 		return event
 	})
@@ -449,6 +503,10 @@ func (p *PodsPresenter) buttonsForNamespaces() {
 }
 
 func (p *PodsPresenter) buttonsForPodsTree() {
+	if p.state.object != nil {
+		p.ui.actionBar.AddAction(1, "Details")
+		p.ui.actionBar.AddAction(2, "Events")
+	}
 	p.ui.actionBar.AddAction(5, "Refresh")
 	p.ui.actionBar.AddAction(10, "Quit")
 }
@@ -457,6 +515,7 @@ func (p *PodsPresenter) buttonsForPodsDetails() {
 	if p.state.object != nil {
 		p.ui.actionBar.AddAction(1, "Details")
 		p.ui.actionBar.AddAction(2, "Events")
+		p.ui.actionBar.AddAction(5, "Refresh")
 	}
 	p.ui.actionBar.AddAction(10, "Quit")
 }
@@ -472,6 +531,12 @@ func (p *PodsPresenter) refreshFocused() {
 			p.displayError(p.populatePods(p.state.namespace, false))
 		}()
 	case podsDetails:
+		go func() {
+			switch p.state.details {
+			case detailsEvents:
+				p.displayError(p.showEvents(p.state.object))
+			}
+		}()
 	}
 }
 
@@ -560,47 +625,4 @@ func objectMeta(object interface{}) (meta.ObjectMeta, error) {
 	}
 
 	return m, errNotObjMeta
-}
-
-func HumanDuration(d time.Duration) string {
-	// Allow deviation no more than 2 seconds(excluded) to tolerate machine time
-	// inconsistence, it can be considered as almost now.
-	if seconds := int(d.Seconds()); seconds < -1 {
-		return fmt.Sprintf("<invalid>")
-	} else if seconds < 0 {
-		return fmt.Sprintf("0s")
-	} else if seconds < 60*2 {
-		return fmt.Sprintf("%ds", seconds)
-	}
-	minutes := int(d / time.Minute)
-	if minutes < 10 {
-		s := int(d/time.Second) % 60
-		if s == 0 {
-			return fmt.Sprintf("%dm", minutes)
-		}
-		return fmt.Sprintf("%dm%ds", minutes, s)
-	} else if minutes < 60*3 {
-		return fmt.Sprintf("%dm", minutes)
-	}
-	hours := int(d / time.Hour)
-	if hours < 8 {
-		m := int(d/time.Minute) % 60
-		if m == 0 {
-			return fmt.Sprintf("%dh", hours)
-		}
-		return fmt.Sprintf("%dh%dm", hours, m)
-	} else if hours < 48 {
-		return fmt.Sprintf("%dh", hours)
-	} else if hours < 24*8 {
-		h := hours % 24
-		if h == 0 {
-			return fmt.Sprintf("%dd", hours/24)
-		}
-		return fmt.Sprintf("%dd%dh", hours/24, h)
-	} else if hours < 24*365*2 {
-		return fmt.Sprintf("%dd", hours/24)
-	} else if hours < 24*365*8 {
-		return fmt.Sprintf("%dy%dd", hours/24/365, (hours/24)%365)
-	}
-	return fmt.Sprintf("%dy", int(hours/24/365))
 }
