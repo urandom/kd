@@ -5,12 +5,17 @@ import (
 	"path/filepath"
 
 	av1 "k8s.io/api/apps/v1"
+	bv1 "k8s.io/api/batch/v1"
+	bv1b1 "k8s.io/api/batch/v1beta1"
 	cv1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	apps "k8s.io/client-go/kubernetes/typed/apps/v1"
+	batch "k8s.io/client-go/kubernetes/typed/batch/v1"
+	batchBeta "k8s.io/client-go/kubernetes/typed/batch/v1beta1"
 	core "k8s.io/client-go/kubernetes/typed/core/v1"
 
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/xerrors"
 
 	"k8s.io/client-go/tools/clientcmd"
@@ -19,6 +24,8 @@ import (
 type clientSet interface {
 	AppsV1() apps.AppsV1Interface
 	CoreV1() core.CoreV1Interface
+	BatchV1() batch.BatchV1Interface
+	BatchV1beta1() batchBeta.BatchV1beta1Interface
 }
 
 // Client provides functions around the k8s clientset api.
@@ -55,13 +62,72 @@ func New(configPath string) (Client, error) {
 }
 
 type PodTree struct {
-	Deployments []Deployment
+	StatefulSets []*StatefulSet
+	Deployments  []*Deployment
+	DaemonSets   []*DaemonSet
+	Jobs         []*Job
+	CronJobs     []*CronJob
+	Services     []*Service
 }
 
 type Deployment struct {
 	av1.Deployment
 
-	Pods []cv1.Pod
+	pods []cv1.Pod
+}
+
+func (d Deployment) Pods() []cv1.Pod {
+	return d.pods
+}
+
+type StatefulSet struct {
+	av1.StatefulSet
+
+	pods []cv1.Pod
+}
+
+func (s StatefulSet) Pods() []cv1.Pod {
+	return s.pods
+}
+
+type DaemonSet struct {
+	av1.DaemonSet
+
+	pods []cv1.Pod
+}
+
+func (d DaemonSet) Pods() []cv1.Pod {
+	return d.pods
+}
+
+type Job struct {
+	bv1.Job
+
+	pods []cv1.Pod
+}
+
+func (j Job) Pods() []cv1.Pod {
+	return j.pods
+}
+
+type CronJob struct {
+	bv1b1.CronJob
+
+	pods []cv1.Pod
+}
+
+func (c CronJob) Pods() []cv1.Pod {
+	return c.pods
+}
+
+type Service struct {
+	cv1.Service
+
+	pods []cv1.Pod
+}
+
+func (s Service) Pods() []cv1.Pod {
+	return s.pods
 }
 
 func (c Client) Namespaces() ([]string, error) {
@@ -94,25 +160,103 @@ func (c Client) Events(obj meta.ObjectMeta) ([]cv1.Event, error) {
 func (c Client) PodTree(nsName string) (PodTree, error) {
 	core := c.CoreV1()
 	apps := c.AppsV1()
+	batch := c.BatchV1()
+	batchBeta := c.BatchV1beta1()
 
 	tree := PodTree{}
 
-	pods, err := core.Pods(nsName).List(meta.ListOptions{})
-	if err != nil {
-		return tree, xerrors.Errorf("getting list of pods for ns %s: %w", nsName, err)
+	var (
+		pods         *cv1.PodList
+		statefulsets *av1.StatefulSetList
+		deployments  *av1.DeploymentList
+		daemonsets   *av1.DaemonSetList
+		jobs         *bv1.JobList
+		cronjobs     *bv1b1.CronJobList
+		services     *cv1.ServiceList
+	)
+
+	g := &errgroup.Group{}
+	g.Go(func() (err error) {
+		if pods, err = core.Pods(nsName).List(meta.ListOptions{}); err != nil {
+			err = xerrors.Errorf("getting list of pods for ns %s: %w", nsName, err)
+		}
+		return err
+	})
+
+	g.Go(func() (err error) {
+		if statefulsets, err = apps.StatefulSets(nsName).List(meta.ListOptions{}); err != nil {
+			err = xerrors.Errorf("getting list of stateful sets for ns %s: %w", nsName, err)
+		}
+		return err
+	})
+
+	g.Go(func() (err error) {
+		if deployments, err = apps.Deployments(nsName).List(meta.ListOptions{}); err != nil {
+			err = xerrors.Errorf("getting list of deployments for ns %s: %w", nsName, err)
+		}
+		return err
+	})
+
+	g.Go(func() (err error) {
+		if daemonsets, err = apps.DaemonSets(nsName).List(meta.ListOptions{}); err != nil {
+			err = xerrors.Errorf("getting list of daemon sets for ns %s: %w", nsName, err)
+		}
+		return err
+	})
+
+	g.Go(func() (err error) {
+		if jobs, err = batch.Jobs(nsName).List(meta.ListOptions{}); err != nil {
+			err = xerrors.Errorf("getting list of jobs for ns %s: %w", nsName, err)
+		}
+		return err
+	})
+
+	g.Go(func() (err error) {
+		if cronjobs, err = batchBeta.CronJobs(nsName).List(meta.ListOptions{}); err != nil {
+			err = xerrors.Errorf("getting list of cronjobs for ns %s: %w", nsName, err)
+		}
+		return err
+	})
+
+	g.Go(func() (err error) {
+		if services, err = core.Services(nsName).List(meta.ListOptions{}); err != nil {
+			err = xerrors.Errorf("getting list of services for ns %s: %w", nsName, err)
+		}
+		return err
+	})
+
+	if err := g.Wait(); err != nil {
+		return tree, err
 	}
 
-	deployments, err := apps.Deployments(nsName).List(meta.ListOptions{})
-	if err != nil {
-		return tree, xerrors.Errorf("getting list of deployments for ns %s: %w", nsName, err)
+	for _, o := range statefulsets.Items {
+		tree.StatefulSets = append(tree.StatefulSets,
+			&StatefulSet{o, matchPods(pods.Items, o.Spec.Selector.MatchLabels)})
 	}
 
-	for _, d := range deployments.Items {
-		selector := d.Spec.Selector.MatchLabels
+	for _, o := range deployments.Items {
+		tree.Deployments = append(tree.Deployments,
+			&Deployment{o, matchPods(pods.Items, o.Spec.Selector.MatchLabels)})
+	}
 
-		pods := matchPods(pods.Items, selector)
+	for _, o := range daemonsets.Items {
+		tree.DaemonSets = append(tree.DaemonSets,
+			&DaemonSet{o, matchPods(pods.Items, o.Spec.Selector.MatchLabels)})
+	}
 
-		tree.Deployments = append(tree.Deployments, Deployment{d, pods})
+	for _, o := range jobs.Items {
+		tree.Jobs = append(tree.Jobs,
+			&Job{o, matchPods(pods.Items, o.Spec.Selector.MatchLabels)})
+	}
+
+	for _, o := range cronjobs.Items {
+		tree.CronJobs = append(tree.CronJobs,
+			&CronJob{o, matchPods(pods.Items, o.Spec.JobTemplate.Spec.Selector.MatchLabels)})
+	}
+
+	for _, o := range services.Items {
+		tree.Services = append(tree.Services,
+			&Service{o, matchPods(pods.Items, o.Spec.Selector)})
 	}
 
 	return tree, nil
