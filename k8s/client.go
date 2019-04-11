@@ -1,8 +1,15 @@
 package k8s
 
 import (
+	"bufio"
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	av1 "k8s.io/api/apps/v1"
 	bv1 "k8s.io/api/batch/v1"
@@ -260,6 +267,93 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 	}
 
 	return tree, nil
+}
+
+type PodGetter interface {
+	Pods() []cv1.Pod
+}
+
+type ErrMultipleContainers struct {
+	error
+
+	Containers []string
+}
+
+func (c Client) Logs(ctx context.Context, object interface{}, previous bool, container string) (<-chan []byte, error) {
+	writer := make(chan []byte)
+	reader := make(chan []byte)
+
+	go demuxLogs(ctx, writer, reader)
+
+	if pod, ok := object.(cv1.Pod); ok {
+		if len(pod.Spec.Containers) > 1 {
+			names := make([]string, len(pod.Spec.Containers))
+			for i, c := range pod.Spec.Containers {
+				names[i] = c.Name
+			}
+			return nil, ErrMultipleContainers{
+				errors.New("multiple containers"),
+				names,
+			}
+		}
+
+		name := pod.ObjectMeta.GetName()
+		req := c.CoreV1().Pods(pod.ObjectMeta.GetNamespace()).GetLogs(
+			name, &cv1.PodLogOptions{Previous: previous, Follow: true})
+		rc, err := req.Stream()
+		if err != nil {
+			return nil, xerrors.Errorf("getting logs for pod %s: %w", name, err)
+		}
+
+		go readLogData(ctx, rc, reader)
+	}
+
+	return writer, nil
+}
+
+func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan []byte) {
+	var buf bytes.Buffer
+	canTrigger := true
+	trig := make(chan struct{})
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-trig:
+			writer <- buf.Bytes()
+			buf.Reset()
+			canTrigger = true
+		case bytes := <-reader:
+			buf.Write(bytes)
+			// Buffer the writes in a timed window to avoid having to print out
+			// line by line when there is a lot of initial content
+			if canTrigger {
+				time.AfterFunc(250*time.Millisecond, func() { trig <- struct{}{} })
+				canTrigger = false
+			}
+		}
+	}
+}
+
+func readLogData(ctx context.Context, rc io.ReadCloser, data chan<- []byte) {
+	defer rc.Close()
+
+	r := bufio.NewReader(rc)
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		bytes, err := r.ReadBytes('\n')
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("Error reading stream: %v", err)
+				return
+			}
+			return
+		}
+
+		data <- bytes
+	}
 }
 
 func matchPods(pods []cv1.Pod, selector map[string]string) []cv1.Pod {

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -153,6 +154,7 @@ type detailsView int
 const (
 	detailsObject detailsView = iota
 	detailsEvents
+	detailsLog
 )
 
 type PodsPresenter struct {
@@ -166,6 +168,7 @@ type PodsPresenter struct {
 		details         detailsView
 		fullscreen      bool
 	}
+	cancelWatchFn context.CancelFunc
 }
 
 func NewPodsPresenter(ui *UI, client k8s.Client) *PodsPresenter {
@@ -375,6 +378,7 @@ func (p *PodsPresenter) populatePods(ns string, clear bool) error {
 		}
 
 		p.state.object = ref
+		p.onFocused(p.ui.podsTree)
 		switch p.state.details {
 		case detailsObject:
 			go p.showDetails(ref)
@@ -389,6 +393,10 @@ func (p *PodsPresenter) populatePods(ns string, clear bool) error {
 }
 
 func (p *PodsPresenter) showDetails(object interface{}) {
+	if p.cancelWatchFn != nil {
+		p.cancelWatchFn()
+	}
+
 	p.state.details = detailsObject
 	p.ui.app.QueueUpdateDraw(func() {
 		p.setDetailsView()
@@ -478,6 +486,10 @@ func (p *PodsPresenter) printObjectSummary(w io.Writer, object interface{}) {
 }
 
 func (p *PodsPresenter) showEvents(object interface{}) error {
+	if p.cancelWatchFn != nil {
+		p.cancelWatchFn()
+	}
+
 	meta, err := objectMeta(object)
 	if err != nil {
 		log.Printf("Error getting meta information from object %T: %v", object, err)
@@ -554,6 +566,46 @@ func (p *PodsPresenter) showEvents(object interface{}) error {
 	return nil
 }
 
+func (p *PodsPresenter) showLogs(object interface{}) error {
+	if p.cancelWatchFn != nil {
+		p.cancelWatchFn()
+	}
+
+	log.Println("Getting logs")
+	ctx, cancel := context.WithCancel(context.Background())
+	p.cancelWatchFn = cancel
+
+	p.ui.podData.Clear()
+	data, err := p.client.Logs(ctx, object, false, "")
+	if err != nil {
+		if xerrors.As(err, &k8s.ErrMultipleContainers{}) {
+			names := err.(k8s.ErrMultipleContainers).Containers
+			data, err = p.client.Logs(ctx, object, false, names[0])
+		} else {
+			return err
+		}
+	}
+
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case b := <-data:
+				p.ui.app.QueueUpdateDraw(func() {
+					fmt.Fprint(p.ui.podData, string(b))
+				})
+			}
+		}
+	}()
+
+	return nil
+}
+
 func (p *PodsPresenter) setDetailsView() {
 	p.ui.podsDetails.RemoveItem(p.ui.podData)
 	p.ui.podsDetails.RemoveItem(p.ui.podEvents)
@@ -583,6 +635,16 @@ func (p *PodsPresenter) initKeybindings() {
 				p.ui.app.SetFocus(p.ui.podEvents)
 				go func() {
 					p.displayError(p.showEvents(p.state.object))
+				}()
+				return nil
+			}
+		case tcell.KeyF3:
+			if (p.state.activeComponent == podsDetails ||
+				p.state.activeComponent == podsTree) &&
+				p.state.object != nil {
+				p.ui.app.SetFocus(p.ui.podData)
+				go func() {
+					p.displayError(p.showLogs(p.state.object))
 				}()
 				return nil
 			}
@@ -630,6 +692,7 @@ func (p *PodsPresenter) buttonsForPodsTree() {
 	if p.state.object != nil {
 		p.ui.actionBar.AddAction(1, "Details")
 		p.ui.actionBar.AddAction(2, "Events")
+		p.ui.actionBar.AddAction(3, "Logs")
 	}
 	p.ui.actionBar.AddAction(5, "Refresh")
 	p.ui.actionBar.AddAction(10, "Quit")
@@ -639,6 +702,7 @@ func (p *PodsPresenter) buttonsForPodsDetails() {
 	if p.state.object != nil {
 		p.ui.actionBar.AddAction(1, "Details")
 		p.ui.actionBar.AddAction(2, "Events")
+		p.ui.actionBar.AddAction(3, "Logs")
 		p.ui.actionBar.AddAction(5, "Refresh")
 	}
 	p.ui.actionBar.AddAction(10, "Quit")
