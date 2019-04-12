@@ -100,6 +100,12 @@ func (p *ErrorPresenter) displayError(err error) bool {
 	return true
 }
 
+type PickerPresenter struct {
+	ui *UI
+
+	isModalVisible bool
+}
+
 type MainPresenter struct {
 	*ErrorPresenter
 
@@ -159,6 +165,7 @@ const (
 
 type PodsPresenter struct {
 	*ErrorPresenter
+	picker *PickerPresenter
 
 	client k8s.Client
 	state  struct {
@@ -174,6 +181,7 @@ type PodsPresenter struct {
 func NewPodsPresenter(ui *UI, client k8s.Client) *PodsPresenter {
 	return &PodsPresenter{
 		ErrorPresenter: &ErrorPresenter{ui: ui},
+		picker:         &PickerPresenter{ui: ui},
 		client:         client,
 	}
 }
@@ -566,7 +574,7 @@ func (p *PodsPresenter) showEvents(object interface{}) error {
 	return nil
 }
 
-func (p *PodsPresenter) showLogs(object interface{}) error {
+func (p *PodsPresenter) showLog(object interface{}) error {
 	if p.cancelWatchFn != nil {
 		p.cancelWatchFn()
 	}
@@ -575,7 +583,12 @@ func (p *PodsPresenter) showLogs(object interface{}) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancelWatchFn = cancel
 
-	p.ui.podData.Clear()
+	p.ui.statusBar.SpinText("Loading logs", p.ui.app)
+	p.state.details = detailsLog
+	p.ui.app.QueueUpdateDraw(func() {
+		p.setDetailsView()
+		p.ui.podData.Clear()
+	})
 	data, err := p.client.Logs(ctx, object, false, "")
 	if err != nil {
 		if xerrors.As(err, &k8s.ErrMultipleContainers{}) {
@@ -596,6 +609,7 @@ func (p *PodsPresenter) showLogs(object interface{}) error {
 			case <-ctx.Done():
 				return
 			case b := <-data:
+				p.ui.statusBar.StopSpin()
 				p.ui.app.QueueUpdateDraw(func() {
 					fmt.Fprint(p.ui.podData, string(b))
 				})
@@ -611,9 +625,13 @@ func (p *PodsPresenter) setDetailsView() {
 	p.ui.podsDetails.RemoveItem(p.ui.podEvents)
 	switch p.state.details {
 	case detailsObject:
+		p.ui.podData.SetTitle("Details")
 		p.ui.podsDetails.AddItem(p.ui.podData, 0, 1, false)
 	case detailsEvents:
 		p.ui.podsDetails.AddItem(p.ui.podEvents, 0, 1, false)
+	case detailsLog:
+		p.ui.podData.SetTitle("Logs")
+		p.ui.podsDetails.AddItem(p.ui.podData, 0, 1, false)
 	}
 }
 
@@ -644,7 +662,7 @@ func (p *PodsPresenter) initKeybindings() {
 				p.state.object != nil {
 				p.ui.app.SetFocus(p.ui.podData)
 				go func() {
-					p.displayError(p.showLogs(p.state.object))
+					p.displayError(p.showLog(p.state.object))
 				}()
 				return nil
 			}

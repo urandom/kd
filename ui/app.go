@@ -9,6 +9,7 @@ type UI struct {
 	pages             *tview.Pages
 	errorModal        *tview.Modal
 	namespaceDropDown *tview.DropDown
+	picker            ModalList
 	podsTree          *tview.TreeView
 	podsDetails       *tview.Flex
 	podData           *tview.TextView

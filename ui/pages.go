@@ -6,6 +6,7 @@ import (
 
 const (
 	pageK8sError = "error-k8s"
+	pagePicker   = "picker"
 	pagePods     = "pods"
 )
 
@@ -13,6 +14,7 @@ func (ui *UI) setupPages() {
 	ui.errorModal = tview.NewModal()
 	ui.errorModal.SetTitle("Error")
 	ui.namespaceDropDown = tview.NewDropDown().SetLabel("Namespace [Enter[]: ")
+	ui.picker = NewModalList()
 	ui.podsTree = tview.NewTreeView().SetTopLevel(1)
 	ui.podsTree.SetBorder(true).SetTitle("Pods")
 	ui.podsDetails = tview.NewFlex()
@@ -34,8 +36,8 @@ func (ui *UI) setupPages() {
 				0, 1, true).
 			AddItem(ui.statusBar, 1, 0, false).
 			AddItem(ui.actionBar, 1, 0, false),
-		true, false)
-
-	ui.pages.AddPage(pageK8sError, ui.errorModal, true, false)
+		true, false).
+		AddPage(pagePicker, ui.picker, true, false).
+		AddPage(pageK8sError, ui.errorModal, true, false)
 
 }

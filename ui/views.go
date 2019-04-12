@@ -73,3 +73,22 @@ func (s StatusBar) StopSpin() {
 	default:
 	}
 }
+
+type ModalList struct {
+	*tview.Grid
+
+	list *tview.List
+}
+
+func NewModalList() ModalList {
+	list := tview.NewList()
+	return ModalList{
+		tview.NewGrid().SetRows(0, 0, 0).SetColumns(0, 0, 0).
+			AddItem(list, 1, 1, 1, 1, 0, 0, true),
+		list,
+	}
+}
+
+func (m ModalList) List() *tview.List {
+	return m.list
+}
