@@ -151,7 +151,6 @@ type podsComponent int
 const (
 	podsTree podsComponent = iota
 	podsDetails
-	podsButtons
 )
 
 type detailsView int
@@ -638,9 +637,8 @@ func (p *PodsPresenter) initKeybindings() {
 			return nil
 		case tcell.KeyF1:
 			p.ui.app.SetFocus(p.ui.podData)
-			if (p.state.activeComponent == podsDetails ||
-				p.state.activeComponent == podsTree) &&
-				p.state.object != nil {
+			p.onFocused(p.ui.podData)
+			if p.state.object != nil {
 				go p.showDetails(p.state.object)
 				return nil
 			}
@@ -648,20 +646,18 @@ func (p *PodsPresenter) initKeybindings() {
 			p.ui.app.SetFocus(p.ui.namespaceDropDown)
 			p.ui.app.QueueEvent(tcell.NewEventKey(tcell.KeyEnter, rune(tcell.KeyEnter), tcell.ModNone))
 		case tcell.KeyF2:
-			if (p.state.activeComponent == podsDetails ||
-				p.state.activeComponent == podsTree) &&
-				p.state.object != nil {
+			if p.state.object != nil {
 				p.ui.app.SetFocus(p.ui.podEvents)
+				p.onFocused(p.ui.podEvents)
 				go func() {
 					p.displayError(p.showEvents(p.state.object))
 				}()
 				return nil
 			}
 		case tcell.KeyF3:
-			if (p.state.activeComponent == podsDetails ||
-				p.state.activeComponent == podsTree) &&
-				p.state.object != nil {
+			if p.state.object != nil {
 				p.ui.app.SetFocus(p.ui.podData)
+				p.onFocused(p.ui.podData)
 				go func() {
 					p.displayError(p.showLog(p.state.object))
 				}()
@@ -686,6 +682,7 @@ func (p *PodsPresenter) initKeybindings() {
 
 func (p *PodsPresenter) onFocused(primitive tview.Primitive) {
 	p.state.activeComponent = primitiveToComponent(primitive)
+	log.Println(p.state.activeComponent)
 
 	p.resetButtons()
 	switch p.state.activeComponent {
@@ -763,7 +760,7 @@ func primitiveToComponent(p tview.Primitive) podsComponent {
 	case *tview.TextView, *tview.Table:
 		return podsDetails
 	default:
-		return podsButtons
+		return podsTree
 	}
 }
 

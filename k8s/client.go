@@ -289,17 +289,23 @@ func (c Client) Logs(ctx context.Context, object interface{}, previous bool, con
 		if len(pod.Spec.Containers) > 1 {
 			names := make([]string, len(pod.Spec.Containers))
 			for i, c := range pod.Spec.Containers {
+				if c.Name == container {
+					names = nil
+					break
+				}
 				names[i] = c.Name
 			}
-			return nil, ErrMultipleContainers{
-				errors.New("multiple containers"),
-				names,
+			if names != nil {
+				return nil, ErrMultipleContainers{
+					errors.New("multiple containers"),
+					names,
+				}
 			}
 		}
 
 		name := pod.ObjectMeta.GetName()
 		req := c.CoreV1().Pods(pod.ObjectMeta.GetNamespace()).GetLogs(
-			name, &cv1.PodLogOptions{Previous: previous, Follow: true})
+			name, &cv1.PodLogOptions{Previous: previous, Follow: true, Container: container})
 		rc, err := req.Stream()
 		if err != nil {
 			return nil, xerrors.Errorf("getting logs for pod %s: %w", name, err)
@@ -328,7 +334,7 @@ func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan []byte) 
 			// Buffer the writes in a timed window to avoid having to print out
 			// line by line when there is a lot of initial content
 			if canTrigger {
-				time.AfterFunc(500*time.Millisecond, func() { trig <- struct{}{} })
+				time.AfterFunc(time.Second, func() { trig <- struct{}{} })
 				canTrigger = false
 			}
 		}
