@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -104,6 +105,33 @@ type PickerPresenter struct {
 	ui *UI
 
 	isModalVisible bool
+	focused        tview.Primitive
+}
+
+func (p *PickerPresenter) PickFrom(title string, items []string) <-chan string {
+	choice := make(chan string)
+
+	p.ui.app.QueueUpdateDraw(func() {
+		list := p.ui.picker.List().Clear().SetSelectedFunc(
+			func(idx int, main, sec string, sk rune) {
+				choice <- main
+				close(choice)
+				p.ui.pages.HidePage(pagePicker)
+				p.ui.app.SetFocus(p.focused)
+			})
+		for i := range items {
+			list.AddItem(items[i], "", rune(strconv.Itoa(i)[0]), nil)
+		}
+
+		list.SetTitle(title)
+
+		p.isModalVisible = true
+		p.focused = p.ui.app.GetFocus()
+		p.ui.pages.ShowPage(pagePicker)
+		p.ui.app.SetFocus(p.ui.picker)
+	})
+
+	return choice
 }
 
 type MainPresenter struct {
@@ -553,7 +581,7 @@ func (p *PodsPresenter) showEvents(object interface{}) error {
 	return nil
 }
 
-func (p *PodsPresenter) showLog(object interface{}) error {
+func (p *PodsPresenter) showLog(object interface{}, container string) error {
 	if p.cancelWatchFn != nil {
 		p.cancelWatchFn()
 	}
@@ -568,11 +596,15 @@ func (p *PodsPresenter) showLog(object interface{}) error {
 		p.setDetailsView()
 		p.ui.podData.Clear()
 	})
-	data, err := p.client.Logs(ctx, object, false, "")
+	data, err := p.client.Logs(ctx, object, false, container)
 	if err != nil {
 		if xerrors.As(err, &k8s.ErrMultipleContainers{}) {
 			names := err.(k8s.ErrMultipleContainers).Containers
-			data, err = p.client.Logs(ctx, object, false, names[0])
+			go func() {
+				choice := <-p.picker.PickFrom("Containers", names)
+				p.displayError(p.showLog(p.state.object, choice))
+			}()
+			return nil
 		} else {
 			return err
 		}
@@ -664,7 +696,7 @@ func (p *PodsPresenter) initKeybindings() {
 				p.ui.app.SetFocus(p.ui.podData)
 				p.onFocused(p.ui.podData)
 				go func() {
-					p.displayError(p.showLog(p.state.object))
+					p.displayError(p.showLog(p.state.object, ""))
 				}()
 				return nil
 			}

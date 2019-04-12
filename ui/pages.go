@@ -15,6 +15,7 @@ func (ui *UI) setupPages() {
 	ui.errorModal.SetTitle("Error")
 	ui.namespaceDropDown = tview.NewDropDown().SetLabel("Namespace [CTRL-N[]: ")
 	ui.picker = NewModalList()
+	ui.picker.List().SetBackgroundColor(tview.Styles.ContrastBackgroundColor).SetBorder(true)
 	ui.podsTree = tview.NewTreeView().SetTopLevel(1)
 	ui.podsTree.SetBorder(true).SetTitle("Pods")
 	ui.podsDetails = tview.NewFlex()
