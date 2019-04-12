@@ -149,8 +149,7 @@ func (p *MainPresenter) initClient() error {
 type podsComponent int
 
 const (
-	podsNamespace podsComponent = iota
-	podsTree
+	podsTree podsComponent = iota
 	podsDetails
 	podsButtons
 )
@@ -200,6 +199,8 @@ func (p *PodsPresenter) populateNamespaces() error {
 				if text == p.state.namespace {
 					return
 				}
+				p.ui.app.SetFocus(p.ui.podsTree)
+				p.onFocused(p.ui.podsTree)
 				go func() {
 					p.displayError(p.populatePods(text, true))
 				}()
@@ -215,23 +216,6 @@ func (p *PodsPresenter) populateNamespaces() error {
 			if !found {
 				p.ui.namespaceDropDown.SetCurrentOption(0)
 			}
-			p.ui.app.SetFocus(p.ui.namespaceDropDown)
-			p.onFocused(p.ui.namespaceDropDown)
-			p.state.activeComponent = podsNamespace
-
-			p.cycleFocusCapture(
-				p.ui.namespaceDropDown,
-				stateMultiPrimitiveToFocus(p),
-				singlePrimitiveToFocus(p.ui.podsTree))
-			p.cycleFocusCapture(p.ui.podsTree,
-				singlePrimitiveToFocus(p.ui.namespaceDropDown),
-				stateMultiPrimitiveToFocus(p))
-			p.cycleFocusCapture(p.ui.podData,
-				singlePrimitiveToFocus(p.ui.podsTree),
-				singlePrimitiveToFocus(p.ui.namespaceDropDown))
-			p.cycleFocusCapture(p.ui.podEvents,
-				singlePrimitiveToFocus(p.ui.podsTree),
-				singlePrimitiveToFocus(p.ui.namespaceDropDown))
 		})
 
 		return nil
@@ -243,10 +227,6 @@ func (p *PodsPresenter) populateNamespaces() error {
 
 type InputCapturer interface {
 	SetInputCapture(capture func(event *tcell.EventKey) *tcell.EventKey) *tview.Box
-}
-
-func (p *PodsPresenter) cycleFocusCapture(on InputCapturer, prev, next primitiveToFocus) {
-	on.SetInputCapture(cycleFocusCapture(p.ui.app, prev, next, p.onFocused))
 }
 
 func (p *PodsPresenter) populatePods(ns string, clear bool) error {
@@ -638,6 +618,24 @@ func (p *PodsPresenter) setDetailsView() {
 func (p *PodsPresenter) initKeybindings() {
 	p.ui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
+		case tcell.KeyTab, tcell.KeyBacktab:
+			var toFocus tview.Primitive
+			switch p.ui.app.GetFocus() {
+			case p.ui.podsTree:
+				switch p.state.details {
+				case detailsObject, detailsLog:
+					toFocus = p.ui.podData
+				case detailsEvents:
+					toFocus = p.ui.podEvents
+				}
+			case p.ui.podData, p.ui.podEvents:
+				toFocus = p.ui.podsTree
+			default:
+				toFocus = p.ui.podsTree
+			}
+			p.ui.app.SetFocus(toFocus)
+			p.onFocused(toFocus)
+			return nil
 		case tcell.KeyF1:
 			p.ui.app.SetFocus(p.ui.podData)
 			if (p.state.activeComponent == podsDetails ||
@@ -646,6 +644,9 @@ func (p *PodsPresenter) initKeybindings() {
 				go p.showDetails(p.state.object)
 				return nil
 			}
+		case tcell.KeyCtrlN:
+			p.ui.app.SetFocus(p.ui.namespaceDropDown)
+			p.ui.app.QueueEvent(tcell.NewEventKey(tcell.KeyEnter, rune(tcell.KeyEnter), tcell.ModNone))
 		case tcell.KeyF2:
 			if (p.state.activeComponent == podsDetails ||
 				p.state.activeComponent == podsTree) &&
@@ -688,8 +689,6 @@ func (p *PodsPresenter) onFocused(primitive tview.Primitive) {
 
 	p.resetButtons()
 	switch p.state.activeComponent {
-	case podsNamespace:
-		p.buttonsForNamespaces()
 	case podsTree:
 		p.buttonsForPodsTree()
 	case podsDetails:
@@ -699,11 +698,6 @@ func (p *PodsPresenter) onFocused(primitive tview.Primitive) {
 
 func (p PodsPresenter) resetButtons() {
 	p.ui.actionBar.Clear()
-}
-
-func (p *PodsPresenter) buttonsForNamespaces() {
-	p.ui.actionBar.AddAction(5, "Refresh")
-	p.ui.actionBar.AddAction(10, "Quit")
 }
 
 func (p *PodsPresenter) buttonsForPodsTree() {
@@ -728,10 +722,6 @@ func (p *PodsPresenter) buttonsForPodsDetails() {
 
 func (p *PodsPresenter) refreshFocused() {
 	switch p.state.activeComponent {
-	case podsNamespace:
-		go func() {
-			p.displayError(p.populateNamespaces())
-		}()
 	case podsTree:
 		go func() {
 			p.displayError(p.populatePods(p.state.namespace, false))
@@ -766,32 +756,8 @@ func stateMultiPrimitiveToFocus(p *PodsPresenter) primitiveToFocus {
 	}
 }
 
-func cycleFocusCapture(app *tview.Application, prev, next primitiveToFocus, focused func(p tview.Primitive)) func(event *tcell.EventKey) *tcell.EventKey {
-	return func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyTab:
-			n := next()
-			if n != nil {
-				app.SetFocus(n)
-				focused(n)
-				return nil
-			}
-		case tcell.KeyBacktab:
-			p := prev()
-			if p != nil {
-				app.SetFocus(p)
-				focused(p)
-				return nil
-			}
-		}
-		return event
-	}
-}
-
 func primitiveToComponent(p tview.Primitive) podsComponent {
 	switch p.(type) {
-	case *tview.DropDown:
-		return podsNamespace
 	case *tview.TreeView:
 		return podsTree
 	case *tview.TextView, *tview.Table:
