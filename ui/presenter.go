@@ -583,15 +583,20 @@ func (p *PodsPresenter) showLog(object interface{}) error {
 	}
 
 	go func() {
+		initial := true
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case b := <-data:
-				p.ui.statusBar.StopSpin()
-				p.ui.app.QueueUpdateDraw(func() {
-					fmt.Fprint(p.ui.podData, string(b))
-				})
+				if initial {
+					p.ui.statusBar.StopSpin()
+					p.ui.app.QueueUpdateDraw(func() {
+						fmt.Fprint(p.ui.podData, string(b))
+					})
+					initial = false
+				}
+				fmt.Fprint(p.ui.podData, string(b))
 			}
 		}
 	}()
@@ -682,7 +687,6 @@ func (p *PodsPresenter) initKeybindings() {
 
 func (p *PodsPresenter) onFocused(primitive tview.Primitive) {
 	p.state.activeComponent = primitiveToComponent(primitive)
-	log.Println(p.state.activeComponent)
 
 	p.resetButtons()
 	switch p.state.activeComponent {

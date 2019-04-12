@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
@@ -13,11 +14,20 @@ import (
 )
 
 var (
-	configF = flag.String("kubeconfig", "", "Path to the kubeconfig file")
+	configF     = flag.String("kubeconfig", "", "Path to the kubeconfig file")
+	cpuProfileF = flag.String("cpuprofile", "", "write cpu profile to file")
 )
 
 func main() {
 	flag.Parse()
+	if *cpuProfileF != "" {
+		f, err := os.Create(*cpuProfileF)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	if err := setupLogging(); err != nil {
 		log.Fatal(err)
