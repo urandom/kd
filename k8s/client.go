@@ -269,6 +269,15 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 	return tree, nil
 }
 
+type ObjectMetaGetter interface {
+	GetObjectMeta() meta.Object
+}
+
+type Controller interface {
+	PodGetter
+	Controller() ObjectMetaGetter
+}
+
 type PodGetter interface {
 	Pods() []cv1.Pod
 }
@@ -280,34 +289,51 @@ type ErrMultipleContainers struct {
 }
 
 func (c Client) Logs(ctx context.Context, object interface{}, previous bool, container string) (<-chan []byte, error) {
+	var pods []cv1.Pod
+
+	switch v := object.(type) {
+	case cv1.Pod:
+		pods = append(pods, v)
+	case PodGetter:
+		pods = v.Pods()
+	}
+
+	if len(pods) == 0 {
+		return nil, nil
+	}
+
+	if len(pods[0].Spec.Containers) > 1 {
+		names := make([]string, len(pods[0].Spec.Containers))
+		for i, c := range pods[0].Spec.Containers {
+			if c.Name == container {
+				names = nil
+				break
+			}
+			names[i] = c.Name
+		}
+		if names != nil {
+			return nil, ErrMultipleContainers{
+				errors.New("multiple containers"),
+				names,
+			}
+		}
+	}
+
 	writer := make(chan []byte)
 	reader := make(chan []byte)
 
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(ctx)
+
 	go demuxLogs(ctx, writer, reader)
 
-	if pod, ok := object.(cv1.Pod); ok {
-		if len(pod.Spec.Containers) > 1 {
-			names := make([]string, len(pod.Spec.Containers))
-			for i, c := range pod.Spec.Containers {
-				if c.Name == container {
-					names = nil
-					break
-				}
-				names[i] = c.Name
-			}
-			if names != nil {
-				return nil, ErrMultipleContainers{
-					errors.New("multiple containers"),
-					names,
-				}
-			}
-		}
-
+	for _, pod := range pods {
 		name := pod.ObjectMeta.GetName()
 		req := c.CoreV1().Pods(pod.ObjectMeta.GetNamespace()).GetLogs(
 			name, &cv1.PodLogOptions{Previous: previous, Follow: true, Container: container})
 		rc, err := req.Stream()
 		if err != nil {
+			cancel()
 			return nil, xerrors.Errorf("getting logs for pod %s: %w", name, err)
 		}
 
@@ -329,7 +355,10 @@ func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan []byte) 
 			writer <- buf.Bytes()
 			buf.Reset()
 			canTrigger = true
-		case bytes := <-reader:
+		case bytes, ok := <-reader:
+			if !ok {
+				return
+			}
 			buf.Write(bytes)
 			// Buffer the writes in a timed window to avoid having to print out
 			// line by line when there is a lot of initial content
