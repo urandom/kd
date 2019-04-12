@@ -26,9 +26,12 @@ github.com/json-iterator/go v1.1.5 h1:gL2yXlmiIo4+t+y32d4WGwOjKGYcGOuyrg46vadswD
 github.com/json-iterator/go v1.1.5/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=
 github.com/kisielk/errcheck v1.1.0/go.mod h1:EZBBE59ingxPouuu3KfxchcWSUPOHkagtvWXihfKN4Q=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
+github.com/lucasb-eyer/go-colorful v0.0.0-20181028223441-12d3b2882a08 h1:5MnxBC15uMxFv5FY/J/8vzyaBiArCOkMdFT9Jsw78iY=
 github.com/lucasb-eyer/go-colorful v0.0.0-20181028223441-12d3b2882a08/go.mod h1:NXg0ArsFk0Y01623LgUqoqcouGDB+PwCCQlrwrG6xJ4=
 github.com/lucasb-eyer/go-colorful v1.0.1 h1:nKJRBvZWPzvkwB4sY8A3U4zgqLf2Y9c02yzPsbXu/5c=
 github.com/lucasb-eyer/go-colorful v1.0.1/go.mod h1:tLy1nWSoU0DGtxQyNRrUmb6PUiB7usbds6gd97XTXwA=
+github.com/lucasb-eyer/go-colorful v1.0.2 h1:mCMFu6PgSozg9tDNMMK3g18oJBX7oYGrC09mS6CXfO4=
+github.com/lucasb-eyer/go-colorful v1.0.2/go.mod h1:0MS4r+7BZKSJ5mw4/S5MPN+qHFF1fYclkSPilDOKW0s=
 github.com/mattn/go-runewidth v0.0.4 h1:2BvfKmzob6Bmd4YsL0zygOqfdFnK7GR4QL06Do4/p7Y=
 github.com/mattn/go-runewidth v0.0.4/go.mod h1:LwmH8dsx7+W8Uxz3IHJYH5QSwggIsqBzpuz5H//U1FU=
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd h1:TRLaZ9cD/w8PVh93nsPXa1VrQ6jlwL5oN8l14QlcNfg=

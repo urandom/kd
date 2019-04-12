@@ -1,7 +1,6 @@
 module github.com/urandom/kd
 
 require (
-	github.com/DATA-DOG/go-sqlmock v1.3.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gdamore/tcell v1.1.1
 	github.com/gogo/protobuf v1.2.1 // indirect
@@ -11,12 +10,10 @@ require (
 	github.com/gregjones/httpcache v0.0.0-20190212212710-3befbb6ad0cc // indirect
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/json-iterator/go v1.1.5 // indirect
-	github.com/lucasb-eyer/go-colorful v1.0.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/rivo/tview v0.0.0-20190406182340-90b4da1bd64c
-	github.com/rivo/uniseg v0.0.0-20190313204849-f699dde9c340 // indirect
 	github.com/spf13/pflag v1.0.3 // indirect
 	github.com/stretchr/testify v1.3.0 // indirect
 	golang.org/x/crypto v0.0.0-20190225124518-7f87c0fbb88b // indirect

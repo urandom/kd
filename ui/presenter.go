@@ -199,6 +199,7 @@ type PodsPresenter struct {
 		namespace       string
 		object          interface{}
 		details         detailsView
+		logContainer    string
 		fullscreen      bool
 	}
 	cancelWatchFn context.CancelFunc
@@ -342,6 +343,10 @@ func (p *PodsPresenter) populatePods(ns string, clear bool) error {
 			go func() {
 				p.displayError(p.showEvents(p.state.object))
 			}()
+		case detailsLog:
+			go func() {
+				p.displayError(p.showLog(p.state.object, p.state.logContainer))
+			}()
 		}
 	})
 
@@ -360,7 +365,7 @@ func (p *PodsPresenter) showDetails(object interface{}) {
 	p.state.details = detailsObject
 	p.ui.app.QueueUpdateDraw(func() {
 		p.setDetailsView()
-		p.ui.podData.SetText("").SetDynamicColors(true)
+		p.ui.podData.SetText("").SetDynamicColors(true).SetRegions(true)
 		if data, err := yaml.Marshal(object); err == nil {
 			fmt.Fprint(p.ui.podData, "[greenyellow::b]Summary\n=======\n\n")
 			p.printObjectSummary(p.ui.podData, object)
@@ -539,9 +544,10 @@ func (p *PodsPresenter) showLog(object interface{}, container string) error {
 
 	p.ui.statusBar.SpinText("Loading logs", p.ui.app)
 	p.state.details = detailsLog
+	p.state.logContainer = container
 	p.ui.app.QueueUpdateDraw(func() {
 		p.setDetailsView()
-		p.ui.podData.Clear().SetDynamicColors(false)
+		p.ui.podData.Clear().SetDynamicColors(false).SetRegions(false)
 	})
 	data, err := p.client.Logs(ctx, object, false, container)
 	if err != nil {

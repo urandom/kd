@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	av1 "k8s.io/api/apps/v1"
@@ -312,6 +313,11 @@ type ErrMultipleContainers struct {
 	Containers []string
 }
 
+type logData struct {
+	from []byte
+	line []byte
+}
+
 func (c Client) Logs(ctx context.Context, object interface{}, previous bool, container string) (<-chan []byte, error) {
 	var pods []cv1.Pod
 
@@ -344,12 +350,12 @@ func (c Client) Logs(ctx context.Context, object interface{}, previous bool, con
 	}
 
 	writer := make(chan []byte)
-	reader := make(chan []byte)
+	reader := make(chan logData)
 
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
 
-	go demuxLogs(ctx, writer, reader)
+	go demuxLogs(ctx, writer, reader, len(pods) > 1)
 
 	for _, pod := range pods {
 		name := pod.ObjectMeta.GetName()
@@ -361,13 +367,20 @@ func (c Client) Logs(ctx context.Context, object interface{}, previous bool, con
 			return nil, xerrors.Errorf("getting logs for pod %s: %w", name, err)
 		}
 
-		go readLogData(ctx, rc, reader)
+		prefix := name
+		idx := strings.LastIndex(name, "-")
+		if idx > 0 {
+			prefix = name[idx+1:]
+		}
+
+		go readLogData(ctx, rc, reader, []byte(prefix))
 	}
 
 	return writer, nil
 }
 
-func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan []byte) {
+func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan logData, showPrefixes bool) {
+	var logData []logData
 	var buf bytes.Buffer
 	canTrigger := true
 	trig := make(chan struct{})
@@ -376,25 +389,34 @@ func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan []byte) 
 		case <-ctx.Done():
 			return
 		case <-trig:
+			for _, d := range logData {
+				if showPrefixes {
+					buf.Write(d.from)
+					buf.Write([]byte(": "))
+				}
+				buf.Write(d.line)
+			}
+			logData = nil
+
 			writer <- buf.Bytes()
 			buf.Reset()
 			canTrigger = true
-		case bytes, ok := <-reader:
+		case data, ok := <-reader:
 			if !ok {
 				return
 			}
-			buf.Write(bytes)
+			logData = append(logData, data)
 			// Buffer the writes in a timed window to avoid having to print out
 			// line by line when there is a lot of initial content
 			if canTrigger {
-				time.AfterFunc(250*time.Millisecond, func() { trig <- struct{}{} })
+				time.AfterFunc(time.Second, func() { trig <- struct{}{} })
 				canTrigger = false
 			}
 		}
 	}
 }
 
-func readLogData(ctx context.Context, rc io.ReadCloser, data chan<- []byte) {
+func readLogData(ctx context.Context, rc io.ReadCloser, data chan<- logData, prefix []byte) {
 	defer rc.Close()
 
 	r := bufio.NewReader(rc)
@@ -411,7 +433,7 @@ func readLogData(ctx context.Context, rc io.ReadCloser, data chan<- []byte) {
 			return
 		}
 
-		data <- bytes
+		data <- logData{from: prefix, line: bytes}
 	}
 }
 
