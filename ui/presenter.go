@@ -360,7 +360,7 @@ func (p *PodsPresenter) showDetails(object interface{}) {
 	p.state.details = detailsObject
 	p.ui.app.QueueUpdateDraw(func() {
 		p.setDetailsView()
-		p.ui.podData.SetText("")
+		p.ui.podData.SetText("").SetDynamicColors(true)
 		if data, err := yaml.Marshal(object); err == nil {
 			fmt.Fprint(p.ui.podData, "[greenyellow::b]Summary\n=======\n\n")
 			p.printObjectSummary(p.ui.podData, object)
@@ -541,7 +541,7 @@ func (p *PodsPresenter) showLog(object interface{}, container string) error {
 	p.state.details = detailsLog
 	p.ui.app.QueueUpdateDraw(func() {
 		p.setDetailsView()
-		p.ui.podData.Clear()
+		p.ui.podData.Clear().SetDynamicColors(false)
 	})
 	data, err := p.client.Logs(ctx, object, false, container)
 	if err != nil {
