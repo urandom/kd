@@ -83,6 +83,10 @@ type Deployment struct {
 	pods []cv1.Pod
 }
 
+func (c Deployment) Controller() ObjectMetaGetter {
+	return &c.Deployment
+}
+
 func (d Deployment) Pods() []cv1.Pod {
 	return d.pods
 }
@@ -93,6 +97,10 @@ type StatefulSet struct {
 	pods []cv1.Pod
 }
 
+func (c StatefulSet) Controller() ObjectMetaGetter {
+	return &c.StatefulSet
+}
+
 func (s StatefulSet) Pods() []cv1.Pod {
 	return s.pods
 }
@@ -101,6 +109,10 @@ type DaemonSet struct {
 	av1.DaemonSet
 
 	pods []cv1.Pod
+}
+
+func (c DaemonSet) Controller() ObjectMetaGetter {
+	return &c.DaemonSet
 }
 
 func (d DaemonSet) Pods() []cv1.Pod {
@@ -117,10 +129,18 @@ func (j Job) Pods() []cv1.Pod {
 	return j.pods
 }
 
+func (c Job) Controller() ObjectMetaGetter {
+	return &c.Job
+}
+
 type CronJob struct {
 	bv1b1.CronJob
 
 	pods []cv1.Pod
+}
+
+func (c CronJob) Controller() ObjectMetaGetter {
+	return &c.CronJob
 }
 
 func (c CronJob) Pods() []cv1.Pod {
@@ -131,6 +151,10 @@ type Service struct {
 	cv1.Service
 
 	pods []cv1.Pod
+}
+
+func (c Service) Controller() ObjectMetaGetter {
+	return &c.Service
 }
 
 func (s Service) Pods() []cv1.Pod {

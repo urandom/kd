@@ -16,6 +16,9 @@ import (
 	"github.com/urandom/kd/k8s"
 	"golang.org/x/xerrors"
 	yaml "gopkg.in/yaml.v2"
+	av1 "k8s.io/api/apps/v1"
+	bv1 "k8s.io/api/batch/v1"
+	bv1b1 "k8s.io/api/batch/v1beta1"
 	cv1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/duration"
@@ -269,107 +272,48 @@ func (p *PodsPresenter) populatePods(ns string, clear bool) error {
 		}}
 	}
 
+	controllerNames := []string{"Stateful Sets", "Deployments", "Daemon Sets", "Jobs", "Cron Jobs", "Services"}
+	controllers := [][]k8s.Controller{{}, {}, {}, {}, {}, {}}
+	for _, c := range podTree.StatefulSets {
+		controllers[0] = append(controllers[0], c)
+	}
+	for _, c := range podTree.Deployments {
+		controllers[1] = append(controllers[1], c)
+	}
+	for _, c := range podTree.DaemonSets {
+		controllers[2] = append(controllers[2], c)
+	}
+	for _, c := range podTree.Jobs {
+		controllers[3] = append(controllers[3], c)
+	}
+	for _, c := range podTree.CronJobs {
+		controllers[4] = append(controllers[4], c)
+	}
+	for _, c := range podTree.Services {
+		controllers[5] = append(controllers[5], c)
+	}
+
 	p.state.namespace = ns
 	p.ui.app.QueueUpdateDraw(func() {
 		log.Printf("Updating tree view with pods for namespaces %s", ns)
 		root := tview.NewTreeNode(".")
 		p.ui.podsTree.SetRoot(root)
 
-		if len(podTree.StatefulSets) > 0 {
-			dn := tview.NewTreeNode("Stateful Sets").SetSelectable(true).SetColor(tcell.ColorCoral)
-			root.AddChild(dn)
-
-			for _, statefulset := range podTree.StatefulSets {
-				d := tview.NewTreeNode(statefulset.GetObjectMeta().GetName()).
-					SetReference(statefulset).SetSelectable(true)
-				dn.AddChild(d)
-
-				for _, pod := range statefulset.Pods() {
-					p := tview.NewTreeNode(pod.GetObjectMeta().GetName()).
-						SetReference(pod).SetSelectable(true)
-					d.AddChild(p)
-				}
+		for i, c := range controllers {
+			if len(c) == 0 {
+				continue
 			}
-		}
-
-		if len(podTree.Deployments) > 0 {
-			dn := tview.NewTreeNode("Deployments").SetSelectable(true).SetColor(tcell.ColorCoral)
+			dn := tview.NewTreeNode(controllerNames[i]).
+				SetSelectable(true).
+				SetColor(tcell.ColorCoral)
 			root.AddChild(dn)
 
-			for _, deployment := range podTree.Deployments {
-				d := tview.NewTreeNode(deployment.GetObjectMeta().GetName()).
-					SetReference(deployment).SetSelectable(true)
+			for _, controller := range c {
+				d := tview.NewTreeNode(controller.Controller().GetObjectMeta().GetName()).
+					SetReference(controller).SetSelectable(true)
 				dn.AddChild(d)
 
-				for _, pod := range deployment.Pods() {
-					p := tview.NewTreeNode(pod.GetObjectMeta().GetName()).
-						SetReference(pod).SetSelectable(true)
-					d.AddChild(p)
-				}
-			}
-		}
-
-		if len(podTree.DaemonSets) > 0 {
-			dn := tview.NewTreeNode("Daemon Sets").SetSelectable(true).SetColor(tcell.ColorCoral)
-			root.AddChild(dn)
-
-			for _, daemonset := range podTree.DaemonSets {
-				d := tview.NewTreeNode(daemonset.GetObjectMeta().GetName()).
-					SetReference(daemonset).SetSelectable(true)
-				dn.AddChild(d)
-
-				for _, pod := range daemonset.Pods() {
-					p := tview.NewTreeNode(pod.GetObjectMeta().GetName()).
-						SetReference(pod).SetSelectable(true)
-					d.AddChild(p)
-				}
-			}
-		}
-
-		if len(podTree.Jobs) > 0 {
-			dn := tview.NewTreeNode("Jobs").SetSelectable(true).SetColor(tcell.ColorCoral)
-			root.AddChild(dn)
-
-			for _, job := range podTree.Jobs {
-				d := tview.NewTreeNode(job.GetObjectMeta().GetName()).
-					SetReference(job).SetSelectable(true)
-				dn.AddChild(d)
-
-				for _, pod := range job.Pods() {
-					p := tview.NewTreeNode(pod.GetObjectMeta().GetName()).
-						SetReference(pod).SetSelectable(true)
-					d.AddChild(p)
-				}
-			}
-		}
-
-		if len(podTree.CronJobs) > 0 {
-			dn := tview.NewTreeNode("Cron Jobs").SetSelectable(true).SetColor(tcell.ColorCoral)
-			root.AddChild(dn)
-
-			for _, cronjob := range podTree.CronJobs {
-				d := tview.NewTreeNode(cronjob.GetObjectMeta().GetName()).
-					SetReference(cronjob).SetSelectable(true)
-				dn.AddChild(d)
-
-				for _, pod := range cronjob.Pods() {
-					p := tview.NewTreeNode(pod.GetObjectMeta().GetName()).
-						SetReference(pod).SetSelectable(true)
-					d.AddChild(p)
-				}
-			}
-		}
-
-		if len(podTree.Services) > 0 {
-			dn := tview.NewTreeNode("Services").SetSelectable(true).SetColor(tcell.ColorCoral)
-			root.AddChild(dn)
-
-			for _, service := range podTree.Services {
-				d := tview.NewTreeNode(service.GetObjectMeta().GetName()).
-					SetReference(service).SetSelectable(true)
-				dn.AddChild(d)
-
-				for _, pod := range service.Pods() {
+				for _, pod := range controller.Pods() {
 					p := tview.NewTreeNode(pod.GetObjectMeta().GetName()).
 						SetReference(pod).SetSelectable(true)
 					d.AddChild(p)
@@ -453,24 +397,24 @@ func (p *PodsPresenter) printObjectSummary(w io.Writer, object interface{}) {
 			fmt.Fprintf(w, "[skyblue::b]\tLast restart:[white::-] %s\n", duration.HumanDuration(time.Since(lastRestart)))
 		}
 		fmt.Fprintf(w, "[skyblue::b]Age:[white::-] %s\n", duration.HumanDuration(time.Since(v.Status.StartTime.Time)))
-	case *k8s.StatefulSet:
+	case *av1.StatefulSet:
 		replicas := v.Status.Replicas
 		fmt.Fprintf(w, "[skyblue::b]Ready:[white::-] %d/%d\n", v.Status.ReadyReplicas, replicas)
 		fmt.Fprintf(w, "[skyblue::b]Age:[white::-] %s\n", duration.HumanDuration(time.Since(v.ObjectMeta.CreationTimestamp.Time)))
-	case *k8s.Deployment:
+	case *av1.Deployment:
 		replicas := v.Status.Replicas
 		fmt.Fprintf(w, "[skyblue::b]Ready:[white::-] %d/%d\n", v.Status.ReadyReplicas, replicas)
 		fmt.Fprintf(w, "[skyblue::b]Up-to-date:[white::-] %d/%d\n", v.Status.UpdatedReplicas, replicas)
 		fmt.Fprintf(w, "[skyblue::b]Available:[white::-] %d\n", v.Status.AvailableReplicas)
 		fmt.Fprintf(w, "[skyblue::b]Age:[white::-] %s\n", duration.HumanDuration(time.Since(v.ObjectMeta.CreationTimestamp.Time)))
-	case *k8s.DaemonSet:
+	case *av1.DaemonSet:
 		fmt.Fprintf(w, "[skyblue::b]Desired:[white::-] %d\n", v.Status.DesiredNumberScheduled)
 		fmt.Fprintf(w, "[skyblue::b]Current:[white::-] %d\n", v.Status.CurrentNumberScheduled)
 		fmt.Fprintf(w, "[skyblue::b]Ready:[white::-] %d\n", v.Status.NumberReady)
 		fmt.Fprintf(w, "[skyblue::b]Up-to-date:[white::-] %d\n", v.Status.UpdatedNumberScheduled)
 		fmt.Fprintf(w, "[skyblue::b]Available:[white::-] %d\n", v.Status.NumberAvailable)
 		fmt.Fprintf(w, "[skyblue::b]Age:[white::-] %s\n", duration.HumanDuration(time.Since(v.ObjectMeta.CreationTimestamp.Time)))
-	case *k8s.Job:
+	case *bv1.Job:
 		fmt.Fprintf(w, "[skyblue::b]Active:[white::-] %d\n", v.Status.Active)
 		fmt.Fprintf(w, "[skyblue::b]Succeeded:[white::-] %d\n", v.Status.Succeeded)
 		fmt.Fprintf(w, "[skyblue::b]Failed:[white::-] %d\n", v.Status.Failed)
@@ -478,7 +422,7 @@ func (p *PodsPresenter) printObjectSummary(w io.Writer, object interface{}) {
 			fmt.Fprintf(w, "[skyblue::b]Duration:[white::-] %s\n", duration.HumanDuration(v.Status.CompletionTime.Sub(v.Status.StartTime.Time)))
 		}
 		fmt.Fprintf(w, "[skyblue::b]Age:[white::-] %s\n", duration.HumanDuration(time.Since(v.ObjectMeta.CreationTimestamp.Time)))
-	case *k8s.CronJob:
+	case *bv1b1.CronJob:
 		fmt.Fprintf(w, "[skyblue::b]Schedule:[white::-] %s\n", v.Spec.Schedule)
 		if v.Spec.Suspend != nil {
 			fmt.Fprintf(w, "[skyblue::b]Suspend:[white::-] %v\n", *v.Spec.Suspend)
@@ -486,7 +430,7 @@ func (p *PodsPresenter) printObjectSummary(w io.Writer, object interface{}) {
 		fmt.Fprintf(w, "[skyblue::b]Active:[white::-] %d\n", len(v.Status.Active))
 		fmt.Fprintf(w, "[skyblue::b]Last scheduled:[white::-] %s\n", duration.HumanDuration(time.Since(v.Status.LastScheduleTime.Time)))
 		fmt.Fprintf(w, "[skyblue::b]Age:[white::-] %s\n", duration.HumanDuration(time.Since(v.ObjectMeta.CreationTimestamp.Time)))
-	case *k8s.Service:
+	case *cv1.Service:
 		fmt.Fprintf(w, "[skyblue::b]Type:[white::-] %s\n", v.Spec.Type)
 		fmt.Fprintf(w, "[skyblue::b]Cluster IP:[white::-] %s\n", v.Spec.ClusterIP)
 		if len(v.Spec.ExternalIPs) > 0 {
