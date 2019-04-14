@@ -757,45 +757,7 @@ func (p *PodsPresenter) refreshFocused() {
 func (p *PodsPresenter) viewLog() (err error) {
 	log := p.ui.podData.GetText(true)
 	p.ui.app.Suspend(func() {
-		editor := os.Getenv("EDITOR")
-		if editor == "" {
-			editor = "vi"
-		}
-
-		var f *os.File
-		f, err = ioutil.TempFile("", "*.log")
-		if err != nil {
-			err = xerrors.Errorf("creating temporary log file: %w", err)
-			return
-		}
-		defer os.Remove(f.Name())
-		_, err = f.Write([]byte(log))
-		if err != nil {
-			err = xerrors.Errorf("writing log to temporary file: %w", err)
-			return
-		}
-		f.Sync()
-
-		// Clear the screnn
-		fmt.Print("\033[H\033[2J")
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, syscall.SIGTERM, os.Interrupt, os.Kill)
-		defer signal.Stop(sig)
-		go func() {
-			<-sig
-			cancel()
-		}()
-
-		cmd := exec.CommandContext(ctx, editor, f.Name())
-		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-
-		if err = cmd.Run(); err != nil {
-			err = xerrors.Errorf("viewing log through %s: %w", editor, err)
-		}
+		err = externalEditor(log)
 	})
 
 	return err
@@ -836,4 +798,45 @@ func portsToString(ports []cv1.ServicePort) string {
 		}
 	}
 	return strings.Join(parts, ",")
+}
+
+func externalEditor(text string) error {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+
+	f, err := ioutil.TempFile("", "*.log")
+	if err != nil {
+		return xerrors.Errorf("creating temporary log file: %w", err)
+	}
+	defer os.Remove(f.Name())
+	_, err = f.Write([]byte(text))
+	if err != nil {
+		return xerrors.Errorf("writing log to temporary file: %w", err)
+	}
+	f.Sync()
+
+	// Clear the screnn
+	fmt.Print("\033[H\033[2J")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM, os.Interrupt, os.Kill)
+	defer signal.Stop(sig)
+	go func() {
+		<-sig
+		cancel()
+	}()
+
+	cmd := exec.CommandContext(ctx, editor, f.Name())
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+
+	if err = cmd.Run(); err != nil {
+		return xerrors.Errorf("viewing log through %s: %w", editor, err)
+	}
+
+	return nil
 }
