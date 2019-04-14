@@ -5,10 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
+	"os"
+	"os/exec"
+	"os/signal"
 	"reflect"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -363,6 +368,7 @@ func (p *PodsPresenter) showDetails(object interface{}) {
 	}
 
 	p.state.details = detailsObject
+	p.onFocused(p.ui.podData)
 	p.ui.app.QueueUpdateDraw(func() {
 		p.setDetailsView()
 		p.ui.podData.SetText("").SetRegions(true).SetDynamicColors(true)
@@ -476,6 +482,7 @@ func (p *PodsPresenter) showEvents(object interface{}) error {
 	}
 
 	p.state.details = detailsEvents
+	p.onFocused(p.ui.podEvents)
 	p.ui.app.QueueUpdateDraw(func() {
 		p.setDetailsView()
 		p.ui.podEvents.Clear()
@@ -544,6 +551,7 @@ func (p *PodsPresenter) showLog(object interface{}, container string) error {
 
 	p.ui.statusBar.SpinText("Loading logs", p.ui.app)
 	p.state.details = detailsLog
+	p.onFocused(p.ui.podData)
 	p.state.logContainer = container
 	p.ui.app.QueueUpdateDraw(func() {
 		p.setDetailsView()
@@ -652,6 +660,18 @@ func (p *PodsPresenter) initKeybindings() {
 				}()
 				return nil
 			}
+		case tcell.KeyF4:
+			if p.state.object != nil {
+				switch p.state.details {
+				case detailsObject:
+				case detailsEvents:
+					return event
+				case detailsLog:
+					go func() {
+						p.displayError(p.viewLog())
+					}()
+				}
+			}
 		case tcell.KeyF5:
 			p.refreshFocused()
 			return nil
@@ -690,6 +710,13 @@ func (p *PodsPresenter) buttonsForPodsTree() {
 		p.ui.actionBar.AddAction(1, "Details")
 		p.ui.actionBar.AddAction(2, "Events")
 		p.ui.actionBar.AddAction(3, "Logs")
+		switch p.state.details {
+		case detailsObject:
+			p.ui.actionBar.AddAction(4, "Edit")
+		case detailsEvents:
+		case detailsLog:
+			p.ui.actionBar.AddAction(4, "View")
+		}
 	}
 	p.ui.actionBar.AddAction(5, "Refresh")
 	p.ui.actionBar.AddAction(10, "Quit")
@@ -700,6 +727,13 @@ func (p *PodsPresenter) buttonsForPodsDetails() {
 		p.ui.actionBar.AddAction(1, "Details")
 		p.ui.actionBar.AddAction(2, "Events")
 		p.ui.actionBar.AddAction(3, "Logs")
+		switch p.state.details {
+		case detailsObject:
+			p.ui.actionBar.AddAction(4, "Edit")
+		case detailsEvents:
+		case detailsLog:
+			p.ui.actionBar.AddAction(4, "View")
+		}
 		p.ui.actionBar.AddAction(5, "Refresh")
 	}
 	p.ui.actionBar.AddAction(10, "Quit")
@@ -719,6 +753,53 @@ func (p *PodsPresenter) refreshFocused() {
 			}
 		}()
 	}
+}
+
+func (p *PodsPresenter) viewLog() (err error) {
+	log := p.ui.podData.GetText(true)
+	p.ui.app.Suspend(func() {
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			editor = "vi"
+		}
+
+		var f *os.File
+		f, err = ioutil.TempFile("", "*.log")
+		if err != nil {
+			err = xerrors.Errorf("creating temporary log file: %w", err)
+			return
+		}
+		defer os.Remove(f.Name())
+		_, err = f.Write([]byte(log))
+		if err != nil {
+			err = xerrors.Errorf("writing log to temporary file: %w", err)
+			return
+		}
+		f.Sync()
+
+		// Clear the screnn
+		fmt.Print("\033[H\033[2J")
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGTERM, os.Interrupt, os.Kill)
+		defer signal.Stop(sig)
+		go func() {
+			<-sig
+			cancel()
+		}()
+
+		cmd := exec.CommandContext(ctx, editor, f.Name())
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+
+		if err = cmd.Run(); err != nil {
+			err = xerrors.Errorf("viewing log through %s: %w", editor, err)
+		}
+	})
+
+	return err
 }
 
 type primitiveToFocus func() tview.Primitive
