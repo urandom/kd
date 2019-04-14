@@ -444,8 +444,8 @@ func readLogData(ctx context.Context, rc io.ReadCloser, data chan<- logData, pre
 
 func matchPods(pods []cv1.Pod, selector map[string]string) []*cv1.Pod {
 	var matched []*cv1.Pod
-	for _, p := range pods {
-		labels := p.GetLabels()
+	for i := range pods {
+		labels := pods[i].GetLabels()
 
 		mismatch := false
 		for k, v := range selector {
@@ -459,7 +459,7 @@ func matchPods(pods []cv1.Pod, selector map[string]string) []*cv1.Pod {
 			continue
 		}
 
-		matched = append(matched, &p)
+		matched = append(matched, &pods[i])
 	}
 
 	return matched
