@@ -314,11 +314,12 @@ type ErrMultipleContainers struct {
 }
 
 type logData struct {
-	from []byte
-	line []byte
+	color []byte
+	from  []byte
+	line  []byte
 }
 
-func (c Client) Logs(ctx context.Context, object interface{}, previous bool, container string) (<-chan []byte, error) {
+func (c Client) Logs(ctx context.Context, object interface{}, previous bool, container string, colors []string) (<-chan []byte, error) {
 	var pods []cv1.Pod
 
 	switch v := object.(type) {
@@ -357,7 +358,7 @@ func (c Client) Logs(ctx context.Context, object interface{}, previous bool, con
 
 	go demuxLogs(ctx, writer, reader, len(pods) > 1)
 
-	for _, pod := range pods {
+	for i, pod := range pods {
 		name := pod.ObjectMeta.GetName()
 		req := c.CoreV1().Pods(pod.ObjectMeta.GetNamespace()).GetLogs(
 			name, &cv1.PodLogOptions{Previous: previous, Follow: true, Container: container})
@@ -373,7 +374,7 @@ func (c Client) Logs(ctx context.Context, object interface{}, previous bool, con
 			prefix = name[idx+1:]
 		}
 
-		go readLogData(ctx, rc, reader, []byte(prefix))
+		go readLogData(ctx, rc, reader, []byte(prefix), []byte(colors[i%len(colors)]))
 	}
 
 	return writer, nil
@@ -391,8 +392,12 @@ func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan logData,
 		case <-trig:
 			for _, d := range logData {
 				if showPrefixes {
+					buf.Write([]byte("["))
+					buf.Write(d.color)
+					buf.Write([]byte("]"))
 					buf.Write(d.from)
 					buf.Write([]byte(" → "))
+					buf.Write([]byte("[white]"))
 				}
 				buf.Write(d.line)
 			}
@@ -416,7 +421,7 @@ func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan logData,
 	}
 }
 
-func readLogData(ctx context.Context, rc io.ReadCloser, data chan<- logData, prefix []byte) {
+func readLogData(ctx context.Context, rc io.ReadCloser, data chan<- logData, prefix []byte, color []byte) {
 	defer rc.Close()
 
 	r := bufio.NewReader(rc)
@@ -433,7 +438,7 @@ func readLogData(ctx context.Context, rc io.ReadCloser, data chan<- logData, pre
 			return
 		}
 
-		data <- logData{from: prefix, line: bytes}
+		data <- logData{from: prefix, color: color, line: bytes}
 	}
 }
 

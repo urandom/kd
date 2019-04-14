@@ -547,9 +547,9 @@ func (p *PodsPresenter) showLog(object interface{}, container string) error {
 	p.state.logContainer = container
 	p.ui.app.QueueUpdateDraw(func() {
 		p.setDetailsView()
-		p.ui.podData.Clear().SetRegions(false).SetDynamicColors(false)
+		p.ui.podData.Clear().SetRegions(false).SetDynamicColors(true)
 	})
-	data, err := p.client.Logs(ctx, object, false, container)
+	data, err := p.client.Logs(ctx, object, false, container, []string{"yellow", "aqua", "chartreuse"})
 	if err != nil {
 		if xerrors.As(err, &k8s.ErrMultipleContainers{}) {
 			names := err.(k8s.ErrMultipleContainers).Containers
