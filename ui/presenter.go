@@ -365,7 +365,7 @@ func (p *PodsPresenter) showDetails(object interface{}) {
 	p.state.details = detailsObject
 	p.ui.app.QueueUpdateDraw(func() {
 		p.setDetailsView()
-		p.ui.podData.SetText("").SetDynamicColors(true).SetRegions(true)
+		p.ui.podData.SetText("").SetRegions(true).SetDynamicColors(true)
 		if data, err := yaml.Marshal(object); err == nil {
 			fmt.Fprint(p.ui.podData, "[greenyellow::b]Summary\n=======\n\n")
 			p.printObjectSummary(p.ui.podData, object)
@@ -547,7 +547,7 @@ func (p *PodsPresenter) showLog(object interface{}, container string) error {
 	p.state.logContainer = container
 	p.ui.app.QueueUpdateDraw(func() {
 		p.setDetailsView()
-		p.ui.podData.Clear().SetDynamicColors(false).SetRegions(false)
+		p.ui.podData.Clear().SetRegions(false).SetDynamicColors(false)
 	})
 	data, err := p.client.Logs(ctx, object, false, container)
 	if err != nil {
@@ -576,12 +576,11 @@ func (p *PodsPresenter) showLog(object interface{}, container string) error {
 			case b := <-data:
 				if initial {
 					p.ui.statusBar.StopSpin()
-					p.ui.app.QueueUpdateDraw(func() {
-						fmt.Fprint(p.ui.podData, string(b))
-					})
 					initial = false
 				}
-				fmt.Fprint(p.ui.podData, string(b))
+				p.ui.app.QueueUpdateDraw(func() {
+					fmt.Fprint(p.ui.podData, string(b))
+				})
 			}
 		}
 	}()

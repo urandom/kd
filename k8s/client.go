@@ -392,7 +392,7 @@ func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan logData,
 			for _, d := range logData {
 				if showPrefixes {
 					buf.Write(d.from)
-					buf.Write([]byte(": "))
+					buf.Write([]byte(" → "))
 				}
 				buf.Write(d.line)
 			}
@@ -409,7 +409,7 @@ func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan logData,
 			// Buffer the writes in a timed window to avoid having to print out
 			// line by line when there is a lot of initial content
 			if canTrigger {
-				time.AfterFunc(time.Second, func() { trig <- struct{}{} })
+				time.AfterFunc(250*time.Millisecond, func() { trig <- struct{}{} })
 				canTrigger = false
 			}
 		}
