@@ -81,52 +81,52 @@ type PodTree struct {
 type Deployment struct {
 	av1.Deployment
 
-	pods []cv1.Pod
+	pods []*cv1.Pod
 }
 
 func (c Deployment) Controller() ObjectMetaGetter {
 	return &c.Deployment
 }
 
-func (d Deployment) Pods() []cv1.Pod {
+func (d Deployment) Pods() []*cv1.Pod {
 	return d.pods
 }
 
 type StatefulSet struct {
 	av1.StatefulSet
 
-	pods []cv1.Pod
+	pods []*cv1.Pod
 }
 
 func (c StatefulSet) Controller() ObjectMetaGetter {
 	return &c.StatefulSet
 }
 
-func (s StatefulSet) Pods() []cv1.Pod {
+func (s StatefulSet) Pods() []*cv1.Pod {
 	return s.pods
 }
 
 type DaemonSet struct {
 	av1.DaemonSet
 
-	pods []cv1.Pod
+	pods []*cv1.Pod
 }
 
 func (c DaemonSet) Controller() ObjectMetaGetter {
 	return &c.DaemonSet
 }
 
-func (d DaemonSet) Pods() []cv1.Pod {
+func (d DaemonSet) Pods() []*cv1.Pod {
 	return d.pods
 }
 
 type Job struct {
 	bv1.Job
 
-	pods []cv1.Pod
+	pods []*cv1.Pod
 }
 
-func (j Job) Pods() []cv1.Pod {
+func (j Job) Pods() []*cv1.Pod {
 	return j.pods
 }
 
@@ -137,28 +137,28 @@ func (c Job) Controller() ObjectMetaGetter {
 type CronJob struct {
 	bv1b1.CronJob
 
-	pods []cv1.Pod
+	pods []*cv1.Pod
 }
 
 func (c CronJob) Controller() ObjectMetaGetter {
 	return &c.CronJob
 }
 
-func (c CronJob) Pods() []cv1.Pod {
+func (c CronJob) Pods() []*cv1.Pod {
 	return c.pods
 }
 
 type Service struct {
 	cv1.Service
 
-	pods []cv1.Pod
+	pods []*cv1.Pod
 }
 
 func (c Service) Controller() ObjectMetaGetter {
 	return &c.Service
 }
 
-func (s Service) Pods() []cv1.Pod {
+func (s Service) Pods() []*cv1.Pod {
 	return s.pods
 }
 
@@ -176,7 +176,7 @@ func (c Client) Namespaces() ([]string, error) {
 	return namespaces, nil
 }
 
-func (c Client) Events(obj meta.ObjectMeta) ([]cv1.Event, error) {
+func (c Client) Events(obj meta.Object) ([]cv1.Event, error) {
 	name, ns := obj.GetName(), obj.GetNamespace()
 	core := c.CoreV1()
 	events := core.Events(ns)
@@ -304,7 +304,7 @@ type Controller interface {
 }
 
 type PodGetter interface {
-	Pods() []cv1.Pod
+	Pods() []*cv1.Pod
 }
 
 type ErrMultipleContainers struct {
@@ -320,10 +320,10 @@ type logData struct {
 }
 
 func (c Client) Logs(ctx context.Context, object interface{}, previous bool, container string, colors []string) (<-chan []byte, error) {
-	var pods []cv1.Pod
+	var pods []*cv1.Pod
 
 	switch v := object.(type) {
-	case cv1.Pod:
+	case *cv1.Pod:
 		pods = append(pods, v)
 	case PodGetter:
 		pods = v.Pods()
@@ -442,8 +442,8 @@ func readLogData(ctx context.Context, rc io.ReadCloser, data chan<- logData, pre
 	}
 }
 
-func matchPods(pods []cv1.Pod, selector map[string]string) []cv1.Pod {
-	var matched []cv1.Pod
+func matchPods(pods []cv1.Pod, selector map[string]string) []*cv1.Pod {
+	var matched []*cv1.Pod
 	for _, p := range pods {
 		labels := p.GetLabels()
 
@@ -459,7 +459,7 @@ func matchPods(pods []cv1.Pod, selector map[string]string) []cv1.Pod {
 			continue
 		}
 
-		matched = append(matched, p)
+		matched = append(matched, &p)
 	}
 
 	return matched

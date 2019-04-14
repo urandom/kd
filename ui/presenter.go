@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"reflect"
 	"strconv"
 	"strings"
 	"syscall"
@@ -385,7 +384,7 @@ func (p *PodsPresenter) showDetails(object interface{}) {
 
 func (p *PodsPresenter) printObjectSummary(w io.Writer, object interface{}) {
 	switch v := object.(type) {
-	case cv1.Pod:
+	case *cv1.Pod:
 		total := len(v.Status.ContainerStatuses)
 		ready := 0
 		var restarts int32
@@ -833,36 +832,18 @@ func primitiveToComponent(p tview.Primitive) podsComponent {
 	}
 }
 
-type ObjectMetaGetter interface {
-	GetObjectMeta() meta.ObjectMeta
-}
-
 var errNotObjMeta = errors.New("object does not have meta data")
 
-func objectMeta(object interface{}) (meta.ObjectMeta, error) {
-	var m meta.ObjectMeta
-	if g, ok := object.(ObjectMetaGetter); ok {
+func objectMeta(object interface{}) (meta.Object, error) {
+	if g, ok := object.(k8s.ObjectMetaGetter); ok {
 		return g.GetObjectMeta(), nil
 	}
 
-	typ := reflect.TypeOf(object)
-	if typ.Kind() != reflect.Struct {
-		return m, errNotObjMeta
-	}
-	val := reflect.ValueOf(object)
-
-	for i := 0; i < typ.NumField(); i++ {
-		f := val.Field(i)
-		if f.Kind() != reflect.Struct {
-			continue
-		}
-
-		if m, ok := f.Interface().(meta.ObjectMeta); ok {
-			return m, nil
-		}
+	if c, ok := object.(k8s.Controller); ok {
+		return c.Controller().GetObjectMeta(), nil
 	}
 
-	return m, errNotObjMeta
+	return nil, errNotObjMeta
 }
 
 func portsToString(ports []cv1.ServicePort) string {
