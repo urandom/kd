@@ -801,26 +801,6 @@ func (p *PodsPresenter) viewLog() (err error) {
 	return err
 }
 
-type primitiveToFocus func() tview.Primitive
-
-func singlePrimitiveToFocus(p tview.Primitive) primitiveToFocus {
-	return func() tview.Primitive {
-		return p
-	}
-}
-
-func stateMultiPrimitiveToFocus(p *PodsPresenter) primitiveToFocus {
-	return func() tview.Primitive {
-		switch p.state.details {
-		case detailsObject:
-			return p.ui.podData
-		case detailsEvents:
-			return p.ui.podEvents
-		}
-		return nil
-	}
-}
-
 func primitiveToComponent(p tview.Primitive) podsComponent {
 	switch p.(type) {
 	case *tview.TreeView:
