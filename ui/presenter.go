@@ -19,13 +19,13 @@ import (
 	"github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
 	"golang.org/x/xerrors"
-	yaml "gopkg.in/yaml.v2"
 	av1 "k8s.io/api/apps/v1"
 	bv1 "k8s.io/api/batch/v1"
 	bv1b1 "k8s.io/api/batch/v1beta1"
 	cv1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/duration"
+	"sigs.k8s.io/yaml"
 )
 
 type FatalError struct {
