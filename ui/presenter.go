@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -663,6 +664,9 @@ func (p *PodsPresenter) initKeybindings() {
 			if p.state.object != nil {
 				switch p.state.details {
 				case detailsObject:
+					go func() {
+						p.displayError(p.editObject(p.state.object))
+					}()
 				case detailsEvents:
 					return event
 				case detailsLog:
@@ -754,10 +758,39 @@ func (p *PodsPresenter) refreshFocused() {
 	}
 }
 
+func (p *PodsPresenter) editObject(object interface{}) (err error) {
+	data, err := yaml.Marshal(object)
+	if err != nil {
+		return err
+	}
+
+	preemble := []byte(`# Please edit the object below. Lines beginning with a '#' will be ignored,
+# and an empty file will abort the edit. If an error occurs while saving this file will be
+# reopened with the relevant failures.
+#
+`)
+	data = append(preemble, data...)
+
+	var updated []byte
+	p.ui.app.Suspend(func() {
+		updated, err = externalEditor(data, true)
+	})
+	if bytes.Equal(data, updated) {
+		// No updates
+		return nil
+	}
+	json, err := yaml.YAMLToJSON(updated)
+	if err != nil {
+		return err
+	}
+
+	return p.client.UpdateObject(object, json)
+}
+
 func (p *PodsPresenter) viewLog() (err error) {
 	log := p.ui.podData.GetText(true)
 	p.ui.app.Suspend(func() {
-		err = externalEditor(log)
+		_, err = externalEditor([]byte(log), false)
 	})
 
 	return err
@@ -777,12 +810,12 @@ func primitiveToComponent(p tview.Primitive) podsComponent {
 var errNotObjMeta = errors.New("object does not have meta data")
 
 func objectMeta(object interface{}) (meta.Object, error) {
-	if g, ok := object.(k8s.ObjectMetaGetter); ok {
-		return g.GetObjectMeta(), nil
-	}
-
 	if c, ok := object.(k8s.Controller); ok {
 		return c.Controller().GetObjectMeta(), nil
+	}
+
+	if g, ok := object.(k8s.ObjectMetaGetter); ok {
+		return g.GetObjectMeta(), nil
 	}
 
 	return nil, errNotObjMeta
@@ -800,7 +833,7 @@ func portsToString(ports []cv1.ServicePort) string {
 	return strings.Join(parts, ",")
 }
 
-func externalEditor(text string) error {
+func externalEditor(text []byte, readBack bool) ([]byte, error) {
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
 		editor = "vi"
@@ -808,12 +841,12 @@ func externalEditor(text string) error {
 
 	f, err := ioutil.TempFile("", "*.log")
 	if err != nil {
-		return xerrors.Errorf("creating temporary log file: %w", err)
+		return nil, xerrors.Errorf("creating temporary file: %w", err)
 	}
 	defer os.Remove(f.Name())
-	_, err = f.Write([]byte(text))
+	_, err = f.Write(text)
 	if err != nil {
-		return xerrors.Errorf("writing log to temporary file: %w", err)
+		return nil, xerrors.Errorf("writing data to temporary file: %w", err)
 	}
 	f.Sync()
 
@@ -835,8 +868,18 @@ func externalEditor(text string) error {
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 
 	if err = cmd.Run(); err != nil {
-		return xerrors.Errorf("viewing log through %s: %w", editor, err)
+		return nil, xerrors.Errorf("viewing data through %s: %w", editor, err)
 	}
 
-	return nil
+	if readBack {
+		f.Seek(0, 0)
+		b, err := ioutil.ReadAll(f)
+		if err != nil {
+			return nil, xerrors.Errorf("reading back data from temporary file: %w", editor, err)
+		}
+
+		return b, nil
+	}
+
+	return nil, nil
 }

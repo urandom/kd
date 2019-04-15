@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -210,51 +211,93 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 	g := &errgroup.Group{}
 	g.Go(func() (err error) {
 		if pods, err = core.Pods(nsName).List(meta.ListOptions{}); err != nil {
-			err = xerrors.Errorf("getting list of pods for ns %s: %w", nsName, err)
+			return xerrors.Errorf("getting list of pods for ns %s: %w", nsName, err)
 		}
-		return err
+		for i := range pods.Items {
+			if pods.Items[i].TypeMeta.Kind == "" {
+				pods.Items[i].TypeMeta.Kind = "Pod"
+				pods.Items[i].TypeMeta.APIVersion = "v1"
+			}
+		}
+		return nil
 	})
 
 	g.Go(func() (err error) {
 		if statefulsets, err = apps.StatefulSets(nsName).List(meta.ListOptions{}); err != nil {
-			err = xerrors.Errorf("getting list of stateful sets for ns %s: %w", nsName, err)
+			return xerrors.Errorf("getting list of stateful sets for ns %s: %w", nsName, err)
+		}
+		for i := range statefulsets.Items {
+			if statefulsets.Items[i].TypeMeta.Kind == "" {
+				statefulsets.Items[i].TypeMeta.Kind = "StatefulSet"
+				statefulsets.Items[i].TypeMeta.APIVersion = "apps/v1"
+			}
 		}
 		return err
 	})
 
 	g.Go(func() (err error) {
 		if deployments, err = apps.Deployments(nsName).List(meta.ListOptions{}); err != nil {
-			err = xerrors.Errorf("getting list of deployments for ns %s: %w", nsName, err)
+			return xerrors.Errorf("getting list of deployments for ns %s: %w", nsName, err)
 		}
-		return err
+		for i := range deployments.Items {
+			if deployments.Items[i].TypeMeta.Kind == "" {
+				deployments.Items[i].TypeMeta.Kind = "Deployment"
+				deployments.Items[i].TypeMeta.APIVersion = "extensions/v1beta1"
+			}
+		}
+		return nil
 	})
 
 	g.Go(func() (err error) {
 		if daemonsets, err = apps.DaemonSets(nsName).List(meta.ListOptions{}); err != nil {
-			err = xerrors.Errorf("getting list of daemon sets for ns %s: %w", nsName, err)
+			return xerrors.Errorf("getting list of daemon sets for ns %s: %w", nsName, err)
 		}
-		return err
+		for i := range daemonsets.Items {
+			if daemonsets.Items[i].TypeMeta.Kind == "" {
+				daemonsets.Items[i].TypeMeta.Kind = "DaemonSet"
+				daemonsets.Items[i].TypeMeta.APIVersion = "extensions/v1beta1"
+			}
+		}
+		return nil
 	})
 
 	g.Go(func() (err error) {
 		if jobs, err = batch.Jobs(nsName).List(meta.ListOptions{}); err != nil {
-			err = xerrors.Errorf("getting list of jobs for ns %s: %w", nsName, err)
+			return xerrors.Errorf("getting list of jobs for ns %s: %w", nsName, err)
 		}
-		return err
+		for i := range jobs.Items {
+			if jobs.Items[i].TypeMeta.Kind == "" {
+				jobs.Items[i].TypeMeta.Kind = "Job"
+				jobs.Items[i].TypeMeta.APIVersion = "batch/v1"
+			}
+		}
+		return nil
 	})
 
 	g.Go(func() (err error) {
 		if cronjobs, err = batchBeta.CronJobs(nsName).List(meta.ListOptions{}); err != nil {
-			err = xerrors.Errorf("getting list of cronjobs for ns %s: %w", nsName, err)
+			return xerrors.Errorf("getting list of cronjobs for ns %s: %w", nsName, err)
 		}
-		return err
+		for i := range cronjobs.Items {
+			if cronjobs.Items[i].TypeMeta.Kind == "" {
+				cronjobs.Items[i].TypeMeta.Kind = "CronJob"
+				cronjobs.Items[i].TypeMeta.APIVersion = "batch/v1beta1"
+			}
+		}
+		return nil
 	})
 
 	g.Go(func() (err error) {
 		if services, err = core.Services(nsName).List(meta.ListOptions{}); err != nil {
-			err = xerrors.Errorf("getting list of services for ns %s: %w", nsName, err)
+			return xerrors.Errorf("getting list of services for ns %s: %w", nsName, err)
 		}
-		return err
+		for i := range services.Items {
+			if services.Items[i].TypeMeta.Kind == "" {
+				services.Items[i].TypeMeta.Kind = "Service"
+				services.Items[i].TypeMeta.APIVersion = "v1"
+			}
+		}
+		return nil
 	})
 
 	if err := g.Wait(); err != nil {
@@ -292,6 +335,31 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 	}
 
 	return tree, nil
+}
+
+func (c Client) UpdateObject(object interface{}, data []byte) error {
+	switch v := object.(type) {
+	case *cv1.Pod:
+		var pod *cv1.Pod
+
+		if err := json.Unmarshal(data, pod); err != nil {
+			return xerrors.Errorf("unmarshaling data into pod: %w", err)
+		}
+		pod, err := c.CoreV1().Pods(v.GetNamespace()).Update(pod)
+		if err != nil {
+			return xerrors.Errorf("updating pod %s: %w", pod.GetName(), err)
+		}
+
+		*v = *pod
+	case *StatefulSet:
+	case *Deployment:
+	case *DaemonSet:
+	case *Job:
+	case *CronJob:
+	case *Service:
+	}
+
+	return nil
 }
 
 type ObjectMetaGetter interface {
