@@ -340,23 +340,34 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 func (c Client) UpdateObject(object interface{}, data []byte) error {
 	switch v := object.(type) {
 	case *cv1.Pod:
-		pod := &cv1.Pod{}
+		update := &cv1.Pod{}
 
-		if err := json.Unmarshal(data, pod); err != nil {
+		if err := json.Unmarshal(data, update); err != nil {
 			return xerrors.Errorf("unmarshaling data into pod: %w", err)
 		}
-		pod, err := c.CoreV1().Pods(v.GetNamespace()).Update(pod)
+		update, err := c.CoreV1().Pods(v.GetNamespace()).Update(update)
 		if err != nil {
-			return xerrors.Errorf("updating pod %s: %w", pod.GetName(), err)
+			return xerrors.Errorf("updating pod %s: %w", update.GetName(), err)
 		}
 
-		*v = *pod
+		*v = *update
 	case *StatefulSet:
 	case *Deployment:
 	case *DaemonSet:
 	case *Job:
 	case *CronJob:
 	case *Service:
+		update := &cv1.Service{}
+
+		if err := json.Unmarshal(data, update); err != nil {
+			return xerrors.Errorf("unmarshaling data into service: %w", err)
+		}
+		update, err := c.CoreV1().Services(v.GetNamespace()).Update(update)
+		if err != nil {
+			return xerrors.Errorf("updating service %s: %w", update.GetName(), err)
+		}
+
+		v.Service = *update
 	}
 
 	return nil
