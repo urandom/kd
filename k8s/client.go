@@ -340,7 +340,7 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 func (c Client) UpdateObject(object interface{}, data []byte) error {
 	switch v := object.(type) {
 	case *cv1.Pod:
-		var pod *cv1.Pod
+		pod := &cv1.Pod{}
 
 		if err := json.Unmarshal(data, pod); err != nil {
 			return xerrors.Errorf("unmarshaling data into pod: %w", err)

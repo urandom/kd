@@ -24,6 +24,7 @@ import (
 	bv1 "k8s.io/api/batch/v1"
 	bv1b1 "k8s.io/api/batch/v1beta1"
 	cv1 "k8s.io/api/core/v1"
+	kerrs "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/duration"
 	"sigs.k8s.io/yaml"
@@ -759,7 +760,7 @@ func (p *PodsPresenter) refreshFocused() {
 }
 
 func (p *PodsPresenter) editObject(object interface{}) (err error) {
-	data, err := yaml.Marshal(object)
+	objData, err := yaml.Marshal(object)
 	if err != nil {
 		return err
 	}
@@ -769,22 +770,45 @@ func (p *PodsPresenter) editObject(object interface{}) (err error) {
 # reopened with the relevant failures.
 #
 `)
-	data = append(preemble, data...)
-
-	var updated []byte
 	p.ui.app.Suspend(func() {
-		updated, err = externalEditor(data, true)
-	})
-	if bytes.Equal(data, updated) {
-		// No updates
-		return nil
-	}
-	json, err := yaml.YAMLToJSON(updated)
-	if err != nil {
-		return err
-	}
+		var msg string
+		for {
+			data := append([]byte(nil), preemble...)
+			if msg != "" {
+				data = append(data, '#', ' ')
+				data = append(data, []byte(msg)...)
+			}
+			data = append(data, objData...)
 
-	return p.client.UpdateObject(object, json)
+			var updated []byte
+			if updated, err = externalEditor(data, true); err != nil {
+				return
+			}
+
+			if bytes.Equal(objData, updated) {
+				// No updates
+				return
+			}
+
+			var json []byte
+			if json, err = yaml.YAMLToJSON(updated); err != nil {
+				return
+			}
+
+			if err = p.client.UpdateObject(object, json); err != nil {
+				if w := xerrors.Unwrap(err); w != nil {
+					if statusError, ok := w.(*kerrs.StatusError); ok {
+						msg = strings.SplitN(statusError.ErrStatus.Message, "\n", 2)[0] + "\n"
+						continue
+					}
+				}
+			}
+
+			return
+		}
+	})
+
+	return err
 }
 
 func (p *PodsPresenter) viewLog() (err error) {
