@@ -352,10 +352,65 @@ func (c Client) UpdateObject(object interface{}, data []byte) error {
 
 		*v = *update
 	case *StatefulSet:
+		update := &av1.StatefulSet{}
+
+		if err := json.Unmarshal(data, update); err != nil {
+			return xerrors.Errorf("unmarshaling data into stateful set: %w", err)
+		}
+		update, err := c.AppsV1().StatefulSets(v.GetNamespace()).Update(update)
+		if err != nil {
+			return xerrors.Errorf("updating stateful set %s: %w", update.GetName(), err)
+		}
+
+		v.StatefulSet = *update
 	case *Deployment:
+		update := &av1.Deployment{}
+
+		if err := json.Unmarshal(data, update); err != nil {
+			return xerrors.Errorf("unmarshaling data into deployment: %w", err)
+		}
+		update, err := c.AppsV1().Deployments(v.GetNamespace()).Update(update)
+		if err != nil {
+			return xerrors.Errorf("updating deployment %s: %w", update.GetName(), err)
+		}
+
+		v.Deployment = *update
 	case *DaemonSet:
+		update := &av1.DaemonSet{}
+
+		if err := json.Unmarshal(data, update); err != nil {
+			return xerrors.Errorf("unmarshaling data into daemon set: %w", err)
+		}
+		update, err := c.AppsV1().DaemonSets(v.GetNamespace()).Update(update)
+		if err != nil {
+			return xerrors.Errorf("updating daemon set %s: %w", update.GetName(), err)
+		}
+
+		v.DaemonSet = *update
 	case *Job:
+		update := &bv1.Job{}
+
+		if err := json.Unmarshal(data, update); err != nil {
+			return xerrors.Errorf("unmarshaling data into job: %w", err)
+		}
+		update, err := c.BatchV1().Jobs(v.GetNamespace()).Update(update)
+		if err != nil {
+			return xerrors.Errorf("updating job %s: %w", update.GetName(), err)
+		}
+
+		v.Job = *update
 	case *CronJob:
+		update := &bv1b1.CronJob{}
+
+		if err := json.Unmarshal(data, update); err != nil {
+			return xerrors.Errorf("unmarshaling data into cron job: %w", err)
+		}
+		update, err := c.BatchV1beta1().CronJobs(v.GetNamespace()).Update(update)
+		if err != nil {
+			return xerrors.Errorf("updating job %s: %w", update.GetName(), err)
+		}
+
+		v.CronJob = *update
 	case *Service:
 		update := &cv1.Service{}
 
