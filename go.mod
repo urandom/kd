@@ -32,3 +32,5 @@ require (
 	k8s.io/klog v0.2.0 // indirect
 	sigs.k8s.io/yaml v1.1.0
 )
+
+replace github.com/rivo/tview => github.com/urandom/tview v0.0.0-20190414155056-8d70a30e01e5
