@@ -1,4 +1,4 @@
-package ui
+package presenter
 
 import (
 	"bytes"
@@ -19,6 +19,7 @@ import (
 	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
+	"github.com/urandom/kd/ui"
 	"golang.org/x/xerrors"
 	av1 "k8s.io/api/apps/v1"
 	bv1 "k8s.io/api/batch/v1"
@@ -41,8 +42,8 @@ type UserRetryableError struct {
 
 type ClientFactory func() (k8s.Client, error)
 
-type ErrorPresenter struct {
-	ui *UI
+type Error struct {
+	ui *ui.UI
 
 	isModalVisible bool
 	focused        tview.Primitive
@@ -56,11 +57,11 @@ const (
 	buttonEmpty   = "      "
 )
 
-func (p *ErrorPresenter) displayError(err error) bool {
+func (p *Error) displayError(err error) bool {
 	if err == nil {
 		if p.isModalVisible {
-			p.ui.app.QueueUpdateDraw(func() {
-				p.ui.pages.HidePage(pageK8sError)
+			p.ui.App.QueueUpdateDraw(func() {
+				p.ui.Pages.HidePage(ui.PageK8sError)
 			})
 		}
 		return false
@@ -78,15 +79,15 @@ func (p *ErrorPresenter) displayError(err error) bool {
 		buttons = append(buttons, buttonRetry)
 	}
 
-	p.ui.app.QueueUpdateDraw(func() {
-		p.ui.errorModal.
+	p.ui.App.QueueUpdateDraw(func() {
+		p.ui.ErrorModal.
 			SetText(fmt.Sprintf("Error: %s", err)).
 			//ClearButtons().
 			AddButtons(buttons).
 			SetDoneFunc(func(idx int, label string) {
 				switch label {
 				case buttonQuit:
-					p.ui.app.Stop()
+					p.ui.App.Stop()
 				case buttonRetry:
 					go func() {
 						p.displayError(err.(UserRetryableError).RetryOp())
@@ -94,36 +95,36 @@ func (p *ErrorPresenter) displayError(err error) bool {
 					fallthrough
 				case buttonClose:
 					p.isModalVisible = false
-					p.ui.pages.HidePage(pageK8sError)
-					p.ui.app.SetFocus(p.focused)
+					p.ui.Pages.HidePage(ui.PageK8sError)
+					p.ui.App.SetFocus(p.focused)
 				}
 			})
 		p.isModalVisible = true
-		p.focused = p.ui.app.GetFocus()
-		p.ui.pages.ShowPage(pageK8sError)
-		p.ui.app.SetFocus(p.ui.errorModal)
+		p.focused = p.ui.App.GetFocus()
+		p.ui.Pages.ShowPage(ui.PageK8sError)
+		p.ui.App.SetFocus(p.ui.ErrorModal)
 	})
 
 	return true
 }
 
-type PickerPresenter struct {
-	ui *UI
+type Picker struct {
+	ui *ui.UI
 
 	isModalVisible bool
 	focused        tview.Primitive
 }
 
-func (p *PickerPresenter) PickFrom(title string, items []string) <-chan string {
+func (p *Picker) PickFrom(title string, items []string) <-chan string {
 	choice := make(chan string)
 
-	p.ui.app.QueueUpdateDraw(func() {
-		list := p.ui.picker.List().Clear().SetSelectedFunc(
+	p.ui.App.QueueUpdateDraw(func() {
+		list := p.ui.Picker.List().Clear().SetSelectedFunc(
 			func(idx int, main, sec string, sk rune) {
 				choice <- main
 				close(choice)
-				p.ui.pages.HidePage(pagePicker)
-				p.ui.app.SetFocus(p.focused)
+				p.ui.Pages.HidePage(ui.PagePicker)
+				p.ui.App.SetFocus(p.focused)
 			})
 		for i := range items {
 			list.AddItem(items[i], "", rune(strconv.Itoa(i)[0]), nil)
@@ -132,16 +133,16 @@ func (p *PickerPresenter) PickFrom(title string, items []string) <-chan string {
 		list.SetTitle(title)
 
 		p.isModalVisible = true
-		p.focused = p.ui.app.GetFocus()
-		p.ui.pages.ShowPage(pagePicker)
-		p.ui.app.SetFocus(p.ui.picker)
+		p.focused = p.ui.App.GetFocus()
+		p.ui.Pages.ShowPage(ui.PagePicker)
+		p.ui.App.SetFocus(p.ui.Picker)
 	})
 
 	return choice
 }
 
-type MainPresenter struct {
-	*ErrorPresenter
+type Main struct {
+	*Error
 
 	clientFactory ClientFactory
 
@@ -149,14 +150,14 @@ type MainPresenter struct {
 	podsPresenter *PodsPresenter
 }
 
-func NewMainPresenter(ui *UI, clientFactory ClientFactory) *MainPresenter {
-	return &MainPresenter{
-		ErrorPresenter: &ErrorPresenter{ui: ui},
-		clientFactory:  clientFactory,
+func NewMain(ui *ui.UI, clientFactory ClientFactory) *Main {
+	return &Main{
+		Error:         &Error{ui: ui},
+		clientFactory: clientFactory,
 	}
 }
 
-func (p *MainPresenter) Run() error {
+func (p *Main) Run() error {
 	go func() {
 		if !p.displayError(p.initClient()) {
 			p.podsPresenter = NewPodsPresenter(p.ui, p.client)
@@ -165,10 +166,10 @@ func (p *MainPresenter) Run() error {
 		}
 	}()
 
-	return p.ui.app.Run()
+	return p.ui.App.Run()
 }
 
-func (p *MainPresenter) initClient() error {
+func (p *Main) initClient() error {
 	var err error
 	log.Println("Creating k8s client")
 	if p.client, err = p.clientFactory(); err != nil {
@@ -196,8 +197,8 @@ const (
 )
 
 type PodsPresenter struct {
-	*ErrorPresenter
-	picker *PickerPresenter
+	*Error
+	picker *Picker
 
 	client k8s.Client
 	state  struct {
@@ -211,30 +212,30 @@ type PodsPresenter struct {
 	cancelWatchFn context.CancelFunc
 }
 
-func NewPodsPresenter(ui *UI, client k8s.Client) *PodsPresenter {
+func NewPodsPresenter(ui *ui.UI, client k8s.Client) *PodsPresenter {
 	return &PodsPresenter{
-		ErrorPresenter: &ErrorPresenter{ui: ui},
-		picker:         &PickerPresenter{ui: ui},
-		client:         client,
+		Error:  &Error{ui: ui},
+		picker: &Picker{ui: ui},
+		client: client,
 	}
 }
 
 func (p *PodsPresenter) populateNamespaces() error {
 	log.Println("Getting cluster namespaces")
-	p.ui.statusBar.SpinText("Loading namespaces", p.ui.app)
-	defer p.ui.statusBar.StopSpin()
-	p.ui.app.QueueUpdate(func() {
-		p.ui.pages.SwitchToPage(pagePods)
+	p.ui.StatusBar.SpinText("Loading namespaces", p.ui.App)
+	defer p.ui.StatusBar.StopSpin()
+	p.ui.App.QueueUpdate(func() {
+		p.ui.Pages.SwitchToPage(ui.PagePods)
 	})
 
 	if namespaces, err := p.client.Namespaces(); err == nil {
-		p.ui.app.QueueUpdateDraw(func() {
-			p.ui.namespaceDropDown.SetOptions(namespaces, func(text string, idx int) {
+		p.ui.App.QueueUpdateDraw(func() {
+			p.ui.NamespaceDropDown.SetOptions(namespaces, func(text string, idx int) {
 				if text == p.state.namespace {
 					return
 				}
-				p.ui.app.SetFocus(p.ui.podsTree)
-				p.onFocused(p.ui.podsTree)
+				p.ui.App.SetFocus(p.ui.PodsTree)
+				p.onFocused(p.ui.PodsTree)
 				go func() {
 					p.displayError(p.populatePods(text, true))
 				}()
@@ -242,13 +243,13 @@ func (p *PodsPresenter) populateNamespaces() error {
 			found := false
 			for i := range namespaces {
 				if namespaces[i] == p.state.namespace {
-					p.ui.namespaceDropDown.SetCurrentOption(i)
+					p.ui.NamespaceDropDown.SetCurrentOption(i)
 					found = true
 					break
 				}
 			}
 			if !found {
-				p.ui.namespaceDropDown.SetCurrentOption(0)
+				p.ui.NamespaceDropDown.SetCurrentOption(0)
 			}
 		})
 
@@ -264,10 +265,10 @@ type InputCapturer interface {
 }
 
 func (p *PodsPresenter) populatePods(ns string, clear bool) error {
-	p.ui.statusBar.SpinText("Loading pods", p.ui.app)
-	defer p.ui.statusBar.StopSpin()
-	p.ui.app.QueueUpdateDraw(func() {
-		p.ui.podsTree.SetRoot(tview.NewTreeNode(""))
+	p.ui.StatusBar.SpinText("Loading pods", p.ui.App)
+	defer p.ui.StatusBar.StopSpin()
+	p.ui.App.QueueUpdateDraw(func() {
+		p.ui.PodsTree.SetRoot(tview.NewTreeNode(""))
 	})
 
 	log.Printf("Getting pod tree for namespace %s", ns)
@@ -301,10 +302,10 @@ func (p *PodsPresenter) populatePods(ns string, clear bool) error {
 	}
 
 	p.state.namespace = ns
-	p.ui.app.QueueUpdateDraw(func() {
+	p.ui.App.QueueUpdateDraw(func() {
 		log.Printf("Updating tree view with pods for namespaces %s", ns)
 		root := tview.NewTreeNode(".")
-		p.ui.podsTree.SetRoot(root)
+		p.ui.PodsTree.SetRoot(root)
 
 		for i, c := range controllers {
 			if len(c) == 0 {
@@ -329,11 +330,11 @@ func (p *PodsPresenter) populatePods(ns string, clear bool) error {
 		}
 
 		if len(root.GetChildren()) > 0 {
-			p.ui.podsTree.SetCurrentNode(root.GetChildren()[0])
+			p.ui.PodsTree.SetCurrentNode(root.GetChildren()[0])
 		}
 	})
 
-	p.ui.podsTree.SetSelectedFunc(func(node *tview.TreeNode) {
+	p.ui.PodsTree.SetSelectedFunc(func(node *tview.TreeNode) {
 		ref := node.GetReference()
 		if ref == nil {
 			node.SetExpanded(!node.IsExpanded())
@@ -341,7 +342,7 @@ func (p *PodsPresenter) populatePods(ns string, clear bool) error {
 		}
 
 		p.state.object = ref
-		p.onFocused(p.ui.podsTree)
+		p.onFocused(p.ui.PodsTree)
 		switch p.state.details {
 		case detailsObject:
 			go p.showDetails(ref)
@@ -369,17 +370,17 @@ func (p *PodsPresenter) showDetails(object interface{}) {
 	}
 
 	p.state.details = detailsObject
-	p.onFocused(p.ui.podData)
-	p.ui.app.QueueUpdateDraw(func() {
+	p.onFocused(p.ui.PodData)
+	p.ui.App.QueueUpdateDraw(func() {
 		p.setDetailsView()
-		p.ui.podData.SetText("").SetRegions(true).SetDynamicColors(true)
+		p.ui.PodData.SetText("").SetRegions(true).SetDynamicColors(true)
 		if data, err := yaml.Marshal(object); err == nil {
-			fmt.Fprint(p.ui.podData, "[greenyellow::b]Summary\n=======\n\n")
-			p.printObjectSummary(p.ui.podData, object)
-			fmt.Fprint(p.ui.podData, "[greenyellow::b]Object\n======\n\n")
-			fmt.Fprint(p.ui.podData, string(data))
+			fmt.Fprint(p.ui.PodData, "[greenyellow::b]Summary\n=======\n\n")
+			p.printObjectSummary(p.ui.PodData, object)
+			fmt.Fprint(p.ui.PodData, "[greenyellow::b]Object\n======\n\n")
+			fmt.Fprint(p.ui.PodData, string(data))
 		} else {
-			p.ui.podData.SetText(err.Error())
+			p.ui.PodData.SetText(err.Error())
 		}
 	})
 }
@@ -471,8 +472,8 @@ func (p *PodsPresenter) showEvents(object interface{}) error {
 	}
 
 	log.Printf("Getting events for object %s", meta.GetName())
-	p.ui.statusBar.SpinText("Loading events", p.ui.app)
-	defer p.ui.statusBar.StopSpin()
+	p.ui.StatusBar.SpinText("Loading events", p.ui.App)
+	defer p.ui.StatusBar.StopSpin()
 
 	list, err := p.client.Events(meta)
 	if err != nil {
@@ -483,10 +484,10 @@ func (p *PodsPresenter) showEvents(object interface{}) error {
 	}
 
 	p.state.details = detailsEvents
-	p.onFocused(p.ui.podEvents)
-	p.ui.app.QueueUpdateDraw(func() {
+	p.onFocused(p.ui.PodEvents)
+	p.ui.App.QueueUpdateDraw(func() {
 		p.setDetailsView()
-		p.ui.podEvents.Clear()
+		p.ui.PodEvents.Clear()
 		headers := []string{}
 		if len(list) == 0 {
 			headers = append(headers, "No events")
@@ -495,7 +496,7 @@ func (p *PodsPresenter) showEvents(object interface{}) error {
 		}
 
 		for i, h := range headers {
-			p.ui.podEvents.SetCell(0, i, tview.NewTableCell(h).
+			p.ui.PodEvents.SetCell(0, i, tview.NewTableCell(h).
 				SetAlign(tview.AlignCenter).
 				SetTextColor(tcell.ColorYellow))
 
@@ -509,10 +510,10 @@ func (p *PodsPresenter) showEvents(object interface{}) error {
 			for j := range headers {
 				switch j {
 				case 0:
-					p.ui.podEvents.SetCell(i+1, j,
+					p.ui.PodEvents.SetCell(i+1, j,
 						tview.NewTableCell(event.Type))
 				case 1:
-					p.ui.podEvents.SetCell(i+1, j,
+					p.ui.PodEvents.SetCell(i+1, j,
 						tview.NewTableCell(event.Reason))
 				case 2:
 					first := duration.HumanDuration(time.Since(event.FirstTimestamp.Time))
@@ -521,17 +522,17 @@ func (p *PodsPresenter) showEvents(object interface{}) error {
 						last := duration.HumanDuration(time.Since(event.LastTimestamp.Time))
 						interval = fmt.Sprintf("%s (x%d since %s)", last, event.Count, first)
 					}
-					p.ui.podEvents.SetCell(i+1, j,
+					p.ui.PodEvents.SetCell(i+1, j,
 						tview.NewTableCell(interval))
 				case 3:
 					from := event.Source.Component
 					if len(event.Source.Host) > 0 {
 						from += ", " + event.Source.Host
 					}
-					p.ui.podEvents.SetCell(i+1, j,
+					p.ui.PodEvents.SetCell(i+1, j,
 						tview.NewTableCell(from))
 				case 4:
-					p.ui.podEvents.SetCell(i+1, j,
+					p.ui.PodEvents.SetCell(i+1, j,
 						tview.NewTableCell(strings.TrimSpace(event.Message)))
 				}
 			}
@@ -550,13 +551,13 @@ func (p *PodsPresenter) showLog(object interface{}, container string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancelWatchFn = cancel
 
-	p.ui.statusBar.SpinText("Loading logs", p.ui.app)
+	p.ui.StatusBar.SpinText("Loading logs", p.ui.App)
 	p.state.details = detailsLog
-	p.onFocused(p.ui.podData)
+	p.onFocused(p.ui.PodData)
 	p.state.logContainer = container
-	p.ui.app.QueueUpdateDraw(func() {
+	p.ui.App.QueueUpdateDraw(func() {
 		p.setDetailsView()
-		p.ui.podData.Clear().SetRegions(false).SetDynamicColors(true)
+		p.ui.PodData.Clear().SetRegions(false).SetDynamicColors(true)
 	})
 	data, err := p.client.Logs(ctx, object, false, container, []string{"yellow", "aqua", "chartreuse"})
 	if err != nil {
@@ -584,11 +585,11 @@ func (p *PodsPresenter) showLog(object interface{}, container string) error {
 				return
 			case b := <-data:
 				if initial {
-					p.ui.statusBar.StopSpin()
+					p.ui.StatusBar.StopSpin()
 					initial = false
 				}
-				p.ui.app.QueueUpdateDraw(func() {
-					fmt.Fprint(p.ui.podData, string(b))
+				p.ui.App.QueueUpdateDraw(func() {
+					fmt.Fprint(p.ui.PodData, string(b))
 				})
 			}
 		}
@@ -598,55 +599,55 @@ func (p *PodsPresenter) showLog(object interface{}, container string) error {
 }
 
 func (p *PodsPresenter) setDetailsView() {
-	p.ui.podsDetails.RemoveItem(p.ui.podData)
-	p.ui.podsDetails.RemoveItem(p.ui.podEvents)
+	p.ui.PodsDetails.RemoveItem(p.ui.PodData)
+	p.ui.PodsDetails.RemoveItem(p.ui.PodEvents)
 	switch p.state.details {
 	case detailsObject:
-		p.ui.podData.SetTitle("Details")
-		p.ui.podsDetails.AddItem(p.ui.podData, 0, 1, false)
+		p.ui.PodData.SetTitle("Details")
+		p.ui.PodsDetails.AddItem(p.ui.PodData, 0, 1, false)
 	case detailsEvents:
-		p.ui.podsDetails.AddItem(p.ui.podEvents, 0, 1, false)
+		p.ui.PodsDetails.AddItem(p.ui.PodEvents, 0, 1, false)
 	case detailsLog:
-		p.ui.podData.SetTitle("Logs")
-		p.ui.podsDetails.AddItem(p.ui.podData, 0, 1, false)
+		p.ui.PodData.SetTitle("Logs")
+		p.ui.PodsDetails.AddItem(p.ui.PodData, 0, 1, false)
 	}
 }
 
 func (p *PodsPresenter) initKeybindings() {
-	p.ui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	p.ui.App.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab, tcell.KeyBacktab:
 			var toFocus tview.Primitive
-			switch p.ui.app.GetFocus() {
-			case p.ui.podsTree:
+			switch p.ui.App.GetFocus() {
+			case p.ui.PodsTree:
 				switch p.state.details {
 				case detailsObject, detailsLog:
-					toFocus = p.ui.podData
+					toFocus = p.ui.PodData
 				case detailsEvents:
-					toFocus = p.ui.podEvents
+					toFocus = p.ui.PodEvents
 				}
-			case p.ui.podData, p.ui.podEvents:
-				toFocus = p.ui.podsTree
+			case p.ui.PodData, p.ui.PodEvents:
+				toFocus = p.ui.PodsTree
 			default:
-				toFocus = p.ui.podsTree
+				toFocus = p.ui.PodsTree
 			}
-			p.ui.app.SetFocus(toFocus)
+			p.ui.App.SetFocus(toFocus)
 			p.onFocused(toFocus)
 			return nil
 		case tcell.KeyF1:
-			p.ui.app.SetFocus(p.ui.podData)
-			p.onFocused(p.ui.podData)
+			p.ui.App.SetFocus(p.ui.PodData)
+			p.onFocused(p.ui.PodData)
 			if p.state.object != nil {
 				go p.showDetails(p.state.object)
 				return nil
 			}
 		case tcell.KeyCtrlN:
-			p.ui.app.SetFocus(p.ui.namespaceDropDown)
-			p.ui.app.QueueEvent(tcell.NewEventKey(tcell.KeyEnter, rune(tcell.KeyEnter), tcell.ModNone))
+			p.ui.App.SetFocus(p.ui.NamespaceDropDown)
+			p.ui.App.QueueEvent(tcell.NewEventKey(tcell.KeyEnter, rune(tcell.KeyEnter), tcell.ModNone))
 		case tcell.KeyF2:
 			if p.state.object != nil {
-				p.ui.app.SetFocus(p.ui.podEvents)
-				p.onFocused(p.ui.podEvents)
+				p.ui.App.SetFocus(p.ui.PodEvents)
+				p.onFocused(p.ui.PodEvents)
 				go func() {
 					p.displayError(p.showEvents(p.state.object))
 				}()
@@ -654,8 +655,8 @@ func (p *PodsPresenter) initKeybindings() {
 			}
 		case tcell.KeyF3:
 			if p.state.object != nil {
-				p.ui.app.SetFocus(p.ui.podData)
-				p.onFocused(p.ui.podData)
+				p.ui.App.SetFocus(p.ui.PodData)
+				p.onFocused(p.ui.PodData)
 				go func() {
 					p.displayError(p.showLog(p.state.object, ""))
 				}()
@@ -680,12 +681,12 @@ func (p *PodsPresenter) initKeybindings() {
 			p.refreshFocused()
 			return nil
 		case tcell.KeyF10:
-			p.ui.app.Stop()
+			p.ui.App.Stop()
 			return nil
 		case tcell.KeyCtrlF:
 			if p.state.activeComponent == podsDetails {
 				p.state.fullscreen = !p.state.fullscreen
-				p.ui.podsDetails.SetFullScreen(p.state.fullscreen)
+				p.ui.PodsDetails.SetFullScreen(p.state.fullscreen)
 				return nil
 			}
 		}
@@ -706,41 +707,41 @@ func (p *PodsPresenter) onFocused(primitive tview.Primitive) {
 }
 
 func (p PodsPresenter) resetButtons() {
-	p.ui.actionBar.Clear()
+	p.ui.ActionBar.Clear()
 }
 
 func (p *PodsPresenter) buttonsForPodsTree() {
 	if p.state.object != nil {
-		p.ui.actionBar.AddAction(1, "Details")
-		p.ui.actionBar.AddAction(2, "Events")
-		p.ui.actionBar.AddAction(3, "Logs")
+		p.ui.ActionBar.AddAction(1, "Details")
+		p.ui.ActionBar.AddAction(2, "Events")
+		p.ui.ActionBar.AddAction(3, "Logs")
 		switch p.state.details {
 		case detailsObject:
-			p.ui.actionBar.AddAction(4, "Edit")
+			p.ui.ActionBar.AddAction(4, "Edit")
 		case detailsEvents:
 		case detailsLog:
-			p.ui.actionBar.AddAction(4, "View")
+			p.ui.ActionBar.AddAction(4, "View")
 		}
 	}
-	p.ui.actionBar.AddAction(5, "Refresh")
-	p.ui.actionBar.AddAction(10, "Quit")
+	p.ui.ActionBar.AddAction(5, "Refresh")
+	p.ui.ActionBar.AddAction(10, "Quit")
 }
 
 func (p *PodsPresenter) buttonsForPodsDetails() {
 	if p.state.object != nil {
-		p.ui.actionBar.AddAction(1, "Details")
-		p.ui.actionBar.AddAction(2, "Events")
-		p.ui.actionBar.AddAction(3, "Logs")
+		p.ui.ActionBar.AddAction(1, "Details")
+		p.ui.ActionBar.AddAction(2, "Events")
+		p.ui.ActionBar.AddAction(3, "Logs")
 		switch p.state.details {
 		case detailsObject:
-			p.ui.actionBar.AddAction(4, "Edit")
+			p.ui.ActionBar.AddAction(4, "Edit")
 		case detailsEvents:
 		case detailsLog:
-			p.ui.actionBar.AddAction(4, "View")
+			p.ui.ActionBar.AddAction(4, "View")
 		}
-		p.ui.actionBar.AddAction(5, "Refresh")
+		p.ui.ActionBar.AddAction(5, "Refresh")
 	}
-	p.ui.actionBar.AddAction(10, "Quit")
+	p.ui.ActionBar.AddAction(10, "Quit")
 }
 
 func (p *PodsPresenter) refreshFocused() {
@@ -770,7 +771,7 @@ func (p *PodsPresenter) editObject(object interface{}) (err error) {
 # reopened with the relevant failures.
 #
 `)
-	p.ui.app.Suspend(func() {
+	p.ui.App.Suspend(func() {
 		var msg string
 		for {
 			data := append([]byte(nil), preemble...)
@@ -812,8 +813,8 @@ func (p *PodsPresenter) editObject(object interface{}) (err error) {
 }
 
 func (p *PodsPresenter) viewLog() (err error) {
-	log := p.ui.podData.GetText(true)
-	p.ui.app.Suspend(func() {
+	log := p.ui.PodData.GetText(true)
+	p.ui.App.Suspend(func() {
 		_, err = externalEditor([]byte(log), false)
 	})
 

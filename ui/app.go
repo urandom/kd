@@ -5,17 +5,17 @@ import (
 )
 
 type UI struct {
-	app               *tview.Application
-	pages             *tview.Pages
-	errorModal        *tview.Modal
-	namespaceDropDown *tview.DropDown
-	picker            ModalList
-	podsTree          *tview.TreeView
-	podsDetails       *tview.Flex
-	podData           *tview.TextView
-	podEvents         *tview.Table
-	statusBar         StatusBar
-	actionBar         ActionBar
+	App               *tview.Application
+	Pages             *tview.Pages
+	ErrorModal        *tview.Modal
+	NamespaceDropDown *tview.DropDown
+	Picker            ModalList
+	PodsTree          *tview.TreeView
+	PodsDetails       *tview.Flex
+	PodData           *tview.TextView
+	PodEvents         *tview.Table
+	StatusBar         StatusBar
+	ActionBar         ActionBar
 }
 
 func New() *UI {
@@ -24,7 +24,7 @@ func New() *UI {
 
 	app.SetRoot(pages, true)
 
-	ui := UI{app: app, pages: pages}
+	ui := UI{App: app, Pages: pages}
 
 	ui.init()
 

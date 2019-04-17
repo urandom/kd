@@ -10,6 +10,7 @@ import (
 
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
+	"github.com/urandom/kd/ui/presenter"
 	"golang.org/x/xerrors"
 )
 
@@ -33,7 +34,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	p := ui.NewMainPresenter(ui.New(), func() (k8s.Client, error) { return k8s.New(*configF) })
+	p := presenter.NewMain(ui.New(), func() (k8s.Client, error) { return k8s.New(*configF) })
 
 	if err := p.Run(); err != nil {
 		fmt.Fprint(os.Stderr, err)

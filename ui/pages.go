@@ -5,40 +5,40 @@ import (
 )
 
 const (
-	pageK8sError = "error-k8s"
-	pagePicker   = "picker"
-	pagePods     = "pods"
+	PageK8sError = "error-k8s"
+	PagePicker   = "picker"
+	PagePods     = "pods"
 )
 
 func (ui *UI) setupPages() {
-	ui.errorModal = tview.NewModal()
-	ui.errorModal.SetTitle("Error")
-	ui.namespaceDropDown = tview.NewDropDown().SetLabel("Namespace [CTRL-N[]: ")
-	ui.picker = NewModalList()
-	ui.picker.List().SetBackgroundColor(tview.Styles.ContrastBackgroundColor).SetBorder(true)
-	ui.podsTree = tview.NewTreeView().SetTopLevel(1)
-	ui.podsTree.SetBorder(true).SetTitle("Pods")
-	ui.podsDetails = tview.NewFlex()
-	ui.podData = tview.NewTextView().SetWrap(false)
-	ui.podData.SetBorder(true).SetTitle("Details")
-	ui.podEvents = tview.NewTable().SetBorders(true)
-	ui.podEvents.SetBorder(true).SetTitle("Events")
-	ui.statusBar = NewStatusBar()
-	ui.actionBar = NewActionBar()
+	ui.ErrorModal = tview.NewModal()
+	ui.ErrorModal.SetTitle("Error")
+	ui.NamespaceDropDown = tview.NewDropDown().SetLabel("Namespace [CTRL-N[]: ")
+	ui.Picker = NewModalList()
+	ui.Picker.List().SetBackgroundColor(tview.Styles.ContrastBackgroundColor).SetBorder(true)
+	ui.PodsTree = tview.NewTreeView().SetTopLevel(1)
+	ui.PodsTree.SetBorder(true).SetTitle("Pods")
+	ui.PodsDetails = tview.NewFlex()
+	ui.PodData = tview.NewTextView().SetWrap(false)
+	ui.PodData.SetBorder(true).SetTitle("Details")
+	ui.PodEvents = tview.NewTable().SetBorders(true)
+	ui.PodEvents.SetBorder(true).SetTitle("Events")
+	ui.StatusBar = NewStatusBar()
+	ui.ActionBar = NewActionBar()
 
-	ui.pages.AddPage(pagePods,
+	ui.Pages.AddPage(PagePods,
 		tview.NewFlex().
 			SetDirection(tview.FlexRow).
-			AddItem(ui.namespaceDropDown, 1, 0, false).
+			AddItem(ui.NamespaceDropDown, 1, 0, false).
 			AddItem(
 				tview.NewFlex().
-					AddItem(ui.podsTree, 0, 1, false).
-					AddItem(ui.podsDetails.AddItem(ui.podData, 0, 1, false), 0, 1, false),
+					AddItem(ui.PodsTree, 0, 1, false).
+					AddItem(ui.PodsDetails.AddItem(ui.PodData, 0, 1, false), 0, 1, false),
 				0, 1, true).
-			AddItem(ui.statusBar, 1, 0, false).
-			AddItem(ui.actionBar, 1, 0, false),
+			AddItem(ui.StatusBar, 1, 0, false).
+			AddItem(ui.ActionBar, 1, 0, false),
 		true, false).
-		AddPage(pagePicker, ui.picker, true, false).
-		AddPage(pageK8sError, ui.errorModal, true, false)
+		AddPage(PagePicker, ui.Picker, true, false).
+		AddPage(PageK8sError, ui.ErrorModal, true, false)
 
 }
