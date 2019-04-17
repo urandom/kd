@@ -146,8 +146,8 @@ type Main struct {
 
 	clientFactory ClientFactory
 
-	client        k8s.Client
-	podsPresenter *PodsPresenter
+	client k8s.Client
+	Pods   *Pods
 }
 
 func NewMain(ui *ui.UI, clientFactory ClientFactory) *Main {
@@ -160,9 +160,9 @@ func NewMain(ui *ui.UI, clientFactory ClientFactory) *Main {
 func (p *Main) Run() error {
 	go func() {
 		if !p.displayError(p.initClient()) {
-			p.podsPresenter = NewPodsPresenter(p.ui, p.client)
-			p.podsPresenter.initKeybindings()
-			p.displayError(p.podsPresenter.populateNamespaces())
+			p.Pods = NewPods(p.ui, p.client)
+			p.Pods.initKeybindings()
+			p.displayError(p.Pods.populateNamespaces())
 		}
 	}()
 
@@ -196,7 +196,7 @@ const (
 	detailsLog
 )
 
-type PodsPresenter struct {
+type Pods struct {
 	*Error
 	picker *Picker
 
@@ -212,15 +212,15 @@ type PodsPresenter struct {
 	cancelWatchFn context.CancelFunc
 }
 
-func NewPodsPresenter(ui *ui.UI, client k8s.Client) *PodsPresenter {
-	return &PodsPresenter{
+func NewPods(ui *ui.UI, client k8s.Client) *Pods {
+	return &Pods{
 		Error:  &Error{ui: ui},
 		picker: &Picker{ui: ui},
 		client: client,
 	}
 }
 
-func (p *PodsPresenter) populateNamespaces() error {
+func (p *Pods) populateNamespaces() error {
 	log.Println("Getting cluster namespaces")
 	p.ui.StatusBar.SpinText("Loading namespaces", p.ui.App)
 	defer p.ui.StatusBar.StopSpin()
@@ -264,7 +264,7 @@ type InputCapturer interface {
 	SetInputCapture(capture func(event *tcell.EventKey) *tcell.EventKey) *tview.Box
 }
 
-func (p *PodsPresenter) populatePods(ns string, clear bool) error {
+func (p *Pods) populatePods(ns string, clear bool) error {
 	p.ui.StatusBar.SpinText("Loading pods", p.ui.App)
 	defer p.ui.StatusBar.StopSpin()
 	p.ui.App.QueueUpdateDraw(func() {
@@ -360,7 +360,7 @@ func (p *PodsPresenter) populatePods(ns string, clear bool) error {
 	return nil
 }
 
-func (p *PodsPresenter) showDetails(object interface{}) {
+func (p *Pods) showDetails(object interface{}) {
 	if p.cancelWatchFn != nil {
 		p.cancelWatchFn()
 	}
@@ -385,7 +385,7 @@ func (p *PodsPresenter) showDetails(object interface{}) {
 	})
 }
 
-func (p *PodsPresenter) printObjectSummary(w io.Writer, object interface{}) {
+func (p *Pods) printObjectSummary(w io.Writer, object interface{}) {
 	switch v := object.(type) {
 	case *cv1.Pod:
 		total := len(v.Status.ContainerStatuses)
@@ -460,7 +460,7 @@ func (p *PodsPresenter) printObjectSummary(w io.Writer, object interface{}) {
 	fmt.Fprintln(w, "")
 }
 
-func (p *PodsPresenter) showEvents(object interface{}) error {
+func (p *Pods) showEvents(object interface{}) error {
 	if p.cancelWatchFn != nil {
 		p.cancelWatchFn()
 	}
@@ -542,7 +542,7 @@ func (p *PodsPresenter) showEvents(object interface{}) error {
 	return nil
 }
 
-func (p *PodsPresenter) showLog(object interface{}, container string) error {
+func (p *Pods) showLog(object interface{}, container string) error {
 	if p.cancelWatchFn != nil {
 		p.cancelWatchFn()
 	}
@@ -598,7 +598,7 @@ func (p *PodsPresenter) showLog(object interface{}, container string) error {
 	return nil
 }
 
-func (p *PodsPresenter) setDetailsView() {
+func (p *Pods) setDetailsView() {
 	p.ui.PodsDetails.RemoveItem(p.ui.PodData)
 	p.ui.PodsDetails.RemoveItem(p.ui.PodEvents)
 	switch p.state.details {
@@ -613,7 +613,7 @@ func (p *PodsPresenter) setDetailsView() {
 	}
 }
 
-func (p *PodsPresenter) initKeybindings() {
+func (p *Pods) initKeybindings() {
 	p.ui.App.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab, tcell.KeyBacktab:
@@ -694,7 +694,7 @@ func (p *PodsPresenter) initKeybindings() {
 	})
 }
 
-func (p *PodsPresenter) onFocused(primitive tview.Primitive) {
+func (p *Pods) onFocused(primitive tview.Primitive) {
 	p.state.activeComponent = primitiveToComponent(primitive)
 
 	p.resetButtons()
@@ -706,11 +706,11 @@ func (p *PodsPresenter) onFocused(primitive tview.Primitive) {
 	}
 }
 
-func (p PodsPresenter) resetButtons() {
+func (p Pods) resetButtons() {
 	p.ui.ActionBar.Clear()
 }
 
-func (p *PodsPresenter) buttonsForPodsTree() {
+func (p *Pods) buttonsForPodsTree() {
 	if p.state.object != nil {
 		p.ui.ActionBar.AddAction(1, "Details")
 		p.ui.ActionBar.AddAction(2, "Events")
@@ -727,7 +727,7 @@ func (p *PodsPresenter) buttonsForPodsTree() {
 	p.ui.ActionBar.AddAction(10, "Quit")
 }
 
-func (p *PodsPresenter) buttonsForPodsDetails() {
+func (p *Pods) buttonsForPodsDetails() {
 	if p.state.object != nil {
 		p.ui.ActionBar.AddAction(1, "Details")
 		p.ui.ActionBar.AddAction(2, "Events")
@@ -744,7 +744,7 @@ func (p *PodsPresenter) buttonsForPodsDetails() {
 	p.ui.ActionBar.AddAction(10, "Quit")
 }
 
-func (p *PodsPresenter) refreshFocused() {
+func (p *Pods) refreshFocused() {
 	switch p.state.activeComponent {
 	case podsTree:
 		go func() {
@@ -760,7 +760,7 @@ func (p *PodsPresenter) refreshFocused() {
 	}
 }
 
-func (p *PodsPresenter) editObject(object interface{}) (err error) {
+func (p *Pods) editObject(object interface{}) (err error) {
 	objData, err := yaml.Marshal(object)
 	if err != nil {
 		return err
@@ -812,7 +812,7 @@ func (p *PodsPresenter) editObject(object interface{}) (err error) {
 	return err
 }
 
-func (p *PodsPresenter) viewLog() (err error) {
+func (p *Pods) viewLog() (err error) {
 	log := p.ui.PodData.GetText(true)
 	p.ui.App.Suspend(func() {
 		_, err = externalEditor([]byte(log), false)
