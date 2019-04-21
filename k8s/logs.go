@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rivo/tview"
 	cv1 "k8s.io/api/core/v1"
 
 	"golang.org/x/xerrors"
@@ -107,7 +108,8 @@ func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan logData,
 					buf.Write([]byte(" → "))
 					buf.Write([]byte("[white]"))
 				}
-				buf.Write(d.line)
+
+				buf.Write([]byte(tview.Escape(string(d.line))))
 			}
 			logData = nil
 
