@@ -142,12 +142,7 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		if pods, err = core.Pods(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of pods for ns %s: %w", nsName, err)
 		}
-		for i := range pods.Items {
-			if pods.Items[i].TypeMeta.Kind == "" {
-				pods.Items[i].TypeMeta.Kind = "Pod"
-				pods.Items[i].TypeMeta.APIVersion = "v1"
-			}
-		}
+		fixPods(pods.Items...)
 		return nil
 	})
 
@@ -155,12 +150,7 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		if statefulsets, err = apps.StatefulSets(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of stateful sets for ns %s: %w", nsName, err)
 		}
-		for i := range statefulsets.Items {
-			if statefulsets.Items[i].TypeMeta.Kind == "" {
-				statefulsets.Items[i].TypeMeta.Kind = "StatefulSet"
-				statefulsets.Items[i].TypeMeta.APIVersion = "apps/v1"
-			}
-		}
+		fixStatefulSets(statefulsets.Items...)
 		return err
 	})
 
@@ -168,12 +158,7 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		if deployments, err = apps.Deployments(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of deployments for ns %s: %w", nsName, err)
 		}
-		for i := range deployments.Items {
-			if deployments.Items[i].TypeMeta.Kind == "" {
-				deployments.Items[i].TypeMeta.Kind = "Deployment"
-				deployments.Items[i].TypeMeta.APIVersion = "extensions/v1beta1"
-			}
-		}
+		fixDeployments(deployments.Items...)
 		return nil
 	})
 
@@ -181,12 +166,7 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		if daemonsets, err = apps.DaemonSets(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of daemon sets for ns %s: %w", nsName, err)
 		}
-		for i := range daemonsets.Items {
-			if daemonsets.Items[i].TypeMeta.Kind == "" {
-				daemonsets.Items[i].TypeMeta.Kind = "DaemonSet"
-				daemonsets.Items[i].TypeMeta.APIVersion = "extensions/v1beta1"
-			}
-		}
+		fixDaemonSets(daemonsets.Items...)
 		return nil
 	})
 
@@ -194,12 +174,7 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		if jobs, err = batch.Jobs(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of jobs for ns %s: %w", nsName, err)
 		}
-		for i := range jobs.Items {
-			if jobs.Items[i].TypeMeta.Kind == "" {
-				jobs.Items[i].TypeMeta.Kind = "Job"
-				jobs.Items[i].TypeMeta.APIVersion = "batch/v1"
-			}
-		}
+		fixJobs(jobs.Items...)
 		return nil
 	})
 
@@ -207,12 +182,7 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		if cronjobs, err = batchBeta.CronJobs(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of cronjobs for ns %s: %w", nsName, err)
 		}
-		for i := range cronjobs.Items {
-			if cronjobs.Items[i].TypeMeta.Kind == "" {
-				cronjobs.Items[i].TypeMeta.Kind = "CronJob"
-				cronjobs.Items[i].TypeMeta.APIVersion = "batch/v1beta1"
-			}
-		}
+		fixCronJobs(cronjobs.Items...)
 		return nil
 	})
 
@@ -220,12 +190,7 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		if services, err = core.Services(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of services for ns %s: %w", nsName, err)
 		}
-		for i := range services.Items {
-			if services.Items[i].TypeMeta.Kind == "" {
-				services.Items[i].TypeMeta.Kind = "Service"
-				services.Items[i].TypeMeta.APIVersion = "v1"
-			}
-		}
+		fixServices(services.Items...)
 		return nil
 	})
 
@@ -358,6 +323,9 @@ func (c Client) UpdateObject(object interface{}, data []byte) error {
 }
 
 func matchPods(pods []cv1.Pod, selector map[string]string) []*cv1.Pod {
+	if len(selector) == 0 {
+		return nil
+	}
 	var matched []*cv1.Pod
 	for i := range pods {
 		labels := pods[i].GetLabels()
@@ -378,4 +346,67 @@ func matchPods(pods []cv1.Pod, selector map[string]string) []*cv1.Pod {
 	}
 
 	return matched
+}
+
+func fixPods(pods ...cv1.Pod) {
+	for i := range pods {
+		if pods[i].TypeMeta.Kind == "" {
+			pods[i].TypeMeta.Kind = "Pod"
+			pods[i].TypeMeta.APIVersion = "v1"
+		}
+	}
+}
+
+func fixStatefulSets(statefulsets ...av1.StatefulSet) {
+	for i := range statefulsets {
+		if statefulsets[i].TypeMeta.Kind == "" {
+			statefulsets[i].TypeMeta.Kind = "StatefulSet"
+			statefulsets[i].TypeMeta.APIVersion = "apps/v1"
+		}
+	}
+}
+
+func fixDeployments(deployments ...av1.Deployment) {
+	for i := range deployments {
+		if deployments[i].TypeMeta.Kind == "" {
+			deployments[i].TypeMeta.Kind = "Deployment"
+			deployments[i].TypeMeta.APIVersion = "extensions/v1beta1"
+		}
+	}
+}
+
+func fixDaemonSets(daemonsets ...av1.DaemonSet) {
+	for i := range daemonsets {
+		if daemonsets[i].TypeMeta.Kind == "" {
+			daemonsets[i].TypeMeta.Kind = "DaemonSet"
+			daemonsets[i].TypeMeta.APIVersion = "extensions/v1beta1"
+		}
+	}
+}
+
+func fixJobs(jobs ...bv1.Job) {
+	for i := range jobs {
+		if jobs[i].TypeMeta.Kind == "" {
+			jobs[i].TypeMeta.Kind = "Job"
+			jobs[i].TypeMeta.APIVersion = "batch/v1"
+		}
+	}
+}
+
+func fixCronJobs(cronjobs ...bv1b1.CronJob) {
+	for i := range cronjobs {
+		if cronjobs[i].TypeMeta.Kind == "" {
+			cronjobs[i].TypeMeta.Kind = "CronJob"
+			cronjobs[i].TypeMeta.APIVersion = "batch/v1beta1"
+		}
+	}
+}
+
+func fixServices(services ...cv1.Service) {
+	for i := range services {
+		if services[i].TypeMeta.Kind == "" {
+			services[i].TypeMeta.Kind = "Service"
+			services[i].TypeMeta.APIVersion = "v1"
+		}
+	}
 }
