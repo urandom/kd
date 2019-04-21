@@ -12,6 +12,7 @@ import (
 	"github.com/urandom/kd/ui"
 	"github.com/urandom/kd/ui/presenter"
 	"golang.org/x/xerrors"
+	"k8s.io/klog"
 )
 
 var (
@@ -20,6 +21,7 @@ var (
 )
 
 func main() {
+	klog.InitFlags(flag.CommandLine)
 	flag.Parse()
 	if *cpuProfileF != "" {
 		f, err := os.Create(*cpuProfileF)

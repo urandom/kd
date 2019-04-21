@@ -105,6 +105,15 @@ func (p *Pods) populatePods(ns string) error {
 
 	log.Printf("Getting pod tree for namespace %s", ns)
 	podTree, err := p.client.PodTree(ns)
+	go func() {
+		c, err := p.client.PodTreeWatcher(context.Background(), ns)
+		log.Println(err)
+		for {
+			select {
+			case <-c:
+			}
+		}
+	}()
 	if err != nil {
 		log.Printf("Error getting pod tree for namespaces %s: %s", ns, err)
 		return UserRetryableError{err, func() error {
@@ -226,7 +235,7 @@ func (p *Pods) populatePods(ns string) error {
 
 	p.ui.PodsTree.SetSelectedFunc(func(node *tview.TreeNode) {
 		ref := node.GetReference()
-		if ref == nil {
+		if _, ok := ref.(int); ok {
 			node.SetExpanded(!node.IsExpanded())
 			return
 		}
