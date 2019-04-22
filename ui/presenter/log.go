@@ -59,7 +59,7 @@ func (p *Log) show(ctx context.Context, object interface{}, container string) (t
 					initial = false
 				}
 				p.ui.App.QueueUpdateDraw(func() {
-					fmt.Fprint(p.ui.PodData, string(b))
+					fmt.Fprint(p.ui.PodData, tview.TranslateANSI(string(b)))
 				})
 			}
 		}
