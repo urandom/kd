@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	av1 "k8s.io/api/apps/v1"
 	bv1 "k8s.io/api/batch/v1"
@@ -171,26 +172,54 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 				pw.Stop()
 				return
 			case ev := <-pw.ResultChan():
-				pod := ev.Object.(*cv1.Pod)
-				fixPod(pod)
+				if ev.Object == nil {
+					log.Print("Nil obj, type -> %v", ev.Type)
+				} else {
+					pod := ev.Object.(*cv1.Pod)
+					fixPod(pod)
+				}
 			case ev := <-stsw.ResultChan():
-				sts := ev.Object.(*av1.StatefulSet)
-				fixStatefulSet(sts)
+				if ev.Object == nil {
+					log.Print("Nil obj, type -> %v", ev.Type)
+				} else {
+					sts := ev.Object.(*av1.StatefulSet)
+					fixStatefulSet(sts)
+				}
 			case ev := <-dw.ResultChan():
-				d := ev.Object.(*av1.Deployment)
-				fixDeployment(d)
+				if ev.Object == nil {
+					log.Print("Nil obj, type -> %v", ev.Type)
+				} else {
+					d := ev.Object.(*av1.Deployment)
+					fixDeployment(d)
+				}
 			case ev := <-dsw.ResultChan():
-				ds := ev.Object.(*av1.DaemonSet)
-				fixDaemonSet(ds)
+				if ev.Object == nil {
+					log.Print("Nil obj, type -> %v", ev.Type)
+				} else {
+					ds := ev.Object.(*av1.DaemonSet)
+					fixDaemonSet(ds)
+				}
 			case ev := <-jw.ResultChan():
-				job := ev.Object.(*bv1.Job)
-				fixJob(job)
+				if ev.Object == nil {
+					log.Print("Nil obj, type -> %v", ev.Type)
+				} else {
+					job := ev.Object.(*bv1.Job)
+					fixJob(job)
+				}
 			case ev := <-cjw.ResultChan():
-				cron := ev.Object.(*bv1b1.CronJob)
-				fixCronJob(cron)
+				if ev.Object == nil {
+					log.Print("Nil obj, type -> %v", ev.Type)
+				} else {
+					cron := ev.Object.(*bv1b1.CronJob)
+					fixCronJob(cron)
+				}
 			case ev := <-sw.ResultChan():
-				svc := ev.Object.(*cv1.Service)
-				fixService(svc)
+				if ev.Object == nil {
+					log.Print("Nil obj, type -> %v", ev.Type)
+				} else {
+					svc := ev.Object.(*cv1.Service)
+					fixService(svc)
+				}
 			}
 		}
 	}()
