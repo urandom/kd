@@ -312,9 +312,19 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 			&Job{o, matchPods(pods.Items, o.Spec.Selector.MatchLabels)})
 	}
 
+CRONJOBS:
 	for _, o := range cronjobs.Items {
-		tree.CronJobs = append(tree.CronJobs,
-			&CronJob{o, matchPods(pods.Items, o.Spec.JobTemplate.Spec.Selector.MatchLabels)})
+		for _, j := range tree.Jobs {
+			for _, owner := range j.GetOwnerReferences() {
+				if owner.UID == o.GetUID() {
+					tree.CronJobs = append(tree.CronJobs,
+						&CronJob{o, matchPods(pods.Items, j.Spec.Selector.MatchLabels)})
+					continue CRONJOBS
+				}
+			}
+		}
+
+		tree.CronJobs = append(tree.CronJobs, &CronJob{o, nil})
 	}
 
 	for _, o := range services.Items {
