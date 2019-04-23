@@ -110,22 +110,23 @@ func (c Job) Controller() ObjectMetaGetter {
 	return &c.Job
 }
 
-func newCronJob(o bv1b1.CronJob, allPods []*cv1.Pod, jobs []*Job) *CronJob {
-	for _, j := range jobs {
-		for _, owner := range j.GetOwnerReferences() {
-			if owner.UID == o.GetUID() {
-				return &CronJob{o, matchPods(allPods, j.Spec.Selector.MatchLabels)}
-			}
-		}
-	}
-
-	return &CronJob{o, nil}
-}
-
 type CronJob struct {
 	bv1b1.CronJob
 
 	pods []*cv1.Pod
+}
+
+func newCronJob(o bv1b1.CronJob, allPods []*cv1.Pod, jobs []*Job) *CronJob {
+	var pods []*cv1.Pod
+	for _, j := range jobs {
+		for _, owner := range j.GetOwnerReferences() {
+			if owner.UID == o.GetUID() {
+				pods = append(pods, matchPods(allPods, j.Spec.Selector.MatchLabels)...)
+			}
+		}
+	}
+
+	return &CronJob{o, pods}
 }
 
 func (c CronJob) Controller() ObjectMetaGetter {
