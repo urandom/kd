@@ -50,7 +50,7 @@ type Pods struct {
 }
 
 func NewPods(ui *ui.UI, client k8s.Client) *Pods {
-	return &Pods{
+	p := &Pods{
 		Error:   &Error{ui: ui},
 		details: NewDetails(ui, client),
 		events:  NewEvents(ui, client),
@@ -58,7 +58,12 @@ func NewPods(ui *ui.UI, client k8s.Client) *Pods {
 		editor:  NewEditor(ui, client),
 		client:  client,
 	}
+	p.state.namespace = "___"
+
+	return p
 }
+
+const AllNamespaces = " ALL "
 
 func (p *Pods) populateNamespaces() error {
 	log.Println("Getting cluster namespaces")
@@ -69,6 +74,9 @@ func (p *Pods) populateNamespaces() error {
 	})
 
 	if namespaces, err := p.client.Namespaces(); err == nil {
+		if namespaces[0] == "" {
+			namespaces[0] = AllNamespaces
+		}
 		p.ui.App.QueueUpdateDraw(func() {
 			p.ui.NamespaceDropDown.SetOptions(namespaces, func(text string, idx int) {
 				if text == p.state.namespace {
@@ -77,6 +85,9 @@ func (p *Pods) populateNamespaces() error {
 				p.ui.App.SetFocus(p.ui.PodsTree)
 				p.onFocused(p.ui.PodsTree)
 				go func() {
+					if text == AllNamespaces {
+						text = ""
+					}
 					p.displayError(p.populatePods(text))
 				}()
 			})

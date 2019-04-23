@@ -63,9 +63,10 @@ func (c Client) Namespaces() ([]string, error) {
 		return nil, xerrors.Errorf("getting list of namespaces: %w", err)
 	}
 
-	namespaces := make([]string, len(ns.Items))
+	namespaces := make([]string, len(ns.Items)+1)
+	namespaces[0] = meta.NamespaceAll
 	for i := range ns.Items {
-		namespaces[i] = ns.Items[i].GetName()
+		namespaces[i+1] = ns.Items[i].GetName()
 	}
 
 	return namespaces, nil
