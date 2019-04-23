@@ -3,13 +3,13 @@ package k8s
 import (
 	"context"
 	"encoding/json"
-	"log"
 
 	av1 "k8s.io/api/apps/v1"
 	bv1 "k8s.io/api/batch/v1"
 	bv1b1 "k8s.io/api/batch/v1beta1"
 	cv1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/xerrors"
@@ -35,6 +35,7 @@ type PodTree struct {
 	Jobs         []*Job
 	CronJobs     []*CronJob
 	Services     []*Service
+	pods         []*cv1.Pod
 }
 
 type StatefulSet struct {
@@ -43,12 +44,20 @@ type StatefulSet struct {
 	pods []*cv1.Pod
 }
 
+func newStatefulSet(o av1.StatefulSet, allPods []*cv1.Pod) *StatefulSet {
+	return &StatefulSet{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
+}
+
 func (c StatefulSet) Controller() ObjectMetaGetter {
 	return &c.StatefulSet
 }
 
 func (s StatefulSet) Pods() []*cv1.Pod {
 	return s.pods
+}
+
+func newDeployment(o av1.Deployment, allPods []*cv1.Pod) *Deployment {
+	return &Deployment{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
 }
 
 type Deployment struct {
@@ -71,6 +80,10 @@ type DaemonSet struct {
 	pods []*cv1.Pod
 }
 
+func newDaemonSet(o av1.DaemonSet, allPods []*cv1.Pod) *DaemonSet {
+	return &DaemonSet{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
+}
+
 func (c DaemonSet) Controller() ObjectMetaGetter {
 	return &c.DaemonSet
 }
@@ -85,12 +98,21 @@ type Job struct {
 	pods []*cv1.Pod
 }
 
+func newJob(o bv1.Job, allPods []*cv1.Pod) *Job {
+	return &Job{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
+}
+
 func (j Job) Pods() []*cv1.Pod {
 	return j.pods
 }
 
 func (c Job) Controller() ObjectMetaGetter {
 	return &c.Job
+}
+
+func newCronJob(o bv1b1.CronJob, allPods []*cv1.Pod) *CronJob {
+	// FIXME: pass in the jobs and use their owner references to match the pods
+	return &CronJob{o, nil}
 }
 
 type CronJob struct {
@@ -113,6 +135,10 @@ type Service struct {
 	pods []*cv1.Pod
 }
 
+func newService(o cv1.Service, allPods []*cv1.Pod) *Service {
+	return &Service{o, matchPods(allPods, o.Spec.Selector)}
+}
+
 func (c Service) Controller() ObjectMetaGetter {
 	return &c.Service
 }
@@ -122,8 +148,8 @@ func (s Service) Pods() []*cv1.Pod {
 }
 
 type PodWatcherEvent struct {
-	Tree  PodTree
-	Error error
+	Tree      PodTree
+	EventType watch.EventType
 }
 
 func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWatcherEvent, error) {
@@ -160,65 +186,128 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 	if err != nil {
 		return nil, xerrors.Errorf("creating service watcher: %w", err)
 	}
+	tree, err := c.PodTree(nsName)
+	if err != nil {
+		return nil, xerrors.Errorf("getting initial pod tree: %w", err)
+	}
 
 	ch := make(chan PodWatcherEvent)
 	go func() {
-		tree, err := c.PodTree(nsName)
-		ch <- PodWatcherEvent{tree, err}
+		ch <- PodWatcherEvent{Tree: tree}
 
 		for {
 			select {
 			case <-ctx.Done():
 				pw.Stop()
+				close(ch)
 				return
 			case ev := <-pw.ResultChan():
-				if ev.Object == nil {
-					log.Print("Nil obj, type -> %v", ev.Type)
-				} else {
-					pod := ev.Object.(*cv1.Pod)
-					fixPod(pod)
+				if o, ok := ev.Object.(*cv1.Pod); ok {
+					fixPod(o)
+					modifyPodInTree(&tree, o, ev.Type == watch.Deleted)
+					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			case ev := <-stsw.ResultChan():
-				if ev.Object == nil {
-					log.Print("Nil obj, type -> %v", ev.Type)
-				} else {
-					sts := ev.Object.(*av1.StatefulSet)
-					fixStatefulSet(sts)
+				if o, ok := ev.Object.(*av1.StatefulSet); ok {
+					fixStatefulSet(o)
+					for i := range tree.StatefulSets {
+						if tree.StatefulSets[i].GetUID() == o.GetUID() {
+							if ev.Type == watch.Deleted {
+								copy(tree.StatefulSets[i:], tree.StatefulSets[i+1:])
+								tree.StatefulSets[len(tree.StatefulSets)-1] = nil
+								tree.StatefulSets = tree.StatefulSets[:len(tree.StatefulSets)-1]
+							} else {
+								tree.StatefulSets[i] = newStatefulSet(*o, tree.pods)
+							}
+							break
+						}
+					}
+					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			case ev := <-dw.ResultChan():
-				if ev.Object == nil {
-					log.Print("Nil obj, type -> %v", ev.Type)
-				} else {
-					d := ev.Object.(*av1.Deployment)
-					fixDeployment(d)
+				if o, ok := ev.Object.(*av1.Deployment); ok {
+					fixDeployment(o)
+					for i := range tree.Deployments {
+						if tree.Deployments[i].GetUID() == o.GetUID() {
+							if ev.Type == watch.Deleted {
+								copy(tree.Deployments[i:], tree.Deployments[i+1:])
+								tree.Deployments[len(tree.Deployments)-1] = nil
+								tree.Deployments = tree.Deployments[:len(tree.Deployments)-1]
+							} else {
+								tree.Deployments[i] = newDeployment(*o, tree.pods)
+							}
+							break
+						}
+					}
+					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			case ev := <-dsw.ResultChan():
-				if ev.Object == nil {
-					log.Print("Nil obj, type -> %v", ev.Type)
-				} else {
-					ds := ev.Object.(*av1.DaemonSet)
-					fixDaemonSet(ds)
+				if o, ok := ev.Object.(*av1.DaemonSet); ok {
+					fixDaemonSet(o)
+					for i := range tree.DaemonSets {
+						if tree.DaemonSets[i].GetUID() == o.GetUID() {
+							if ev.Type == watch.Deleted {
+								copy(tree.DaemonSets[i:], tree.DaemonSets[i+1:])
+								tree.DaemonSets[len(tree.DaemonSets)-1] = nil
+								tree.DaemonSets = tree.DaemonSets[:len(tree.DaemonSets)-1]
+							} else {
+								tree.DaemonSets[i] = newDaemonSet(*o, tree.pods)
+							}
+							break
+						}
+					}
+					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			case ev := <-jw.ResultChan():
-				if ev.Object == nil {
-					log.Print("Nil obj, type -> %v", ev.Type)
-				} else {
-					job := ev.Object.(*bv1.Job)
-					fixJob(job)
+				if o, ok := ev.Object.(*bv1.Job); ok {
+					fixJob(o)
+					for i := range tree.Jobs {
+						if tree.Jobs[i].GetUID() == o.GetUID() {
+							if ev.Type == watch.Deleted {
+								copy(tree.Jobs[i:], tree.Jobs[i+1:])
+								tree.Jobs[len(tree.Jobs)-1] = nil
+								tree.Jobs = tree.Jobs[:len(tree.Jobs)-1]
+							} else {
+								tree.Jobs[i] = newJob(*o, tree.pods)
+							}
+							break
+						}
+					}
+					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			case ev := <-cjw.ResultChan():
-				if ev.Object == nil {
-					log.Print("Nil obj, type -> %v", ev.Type)
-				} else {
-					cron := ev.Object.(*bv1b1.CronJob)
-					fixCronJob(cron)
+				if o, ok := ev.Object.(*bv1b1.CronJob); ok {
+					fixCronJob(o)
+					for i := range tree.CronJobs {
+						if tree.CronJobs[i].GetUID() == o.GetUID() {
+							if ev.Type == watch.Deleted {
+								copy(tree.CronJobs[i:], tree.CronJobs[i+1:])
+								tree.CronJobs[len(tree.CronJobs)-1] = nil
+								tree.CronJobs = tree.CronJobs[:len(tree.CronJobs)-1]
+							} else {
+								tree.CronJobs[i] = newCronJob(*o, tree.pods)
+							}
+							break
+						}
+					}
+					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			case ev := <-sw.ResultChan():
-				if ev.Object == nil {
-					log.Print("Nil obj, type -> %v", ev.Type)
-				} else {
-					svc := ev.Object.(*cv1.Service)
-					fixService(svc)
+				if o, ok := ev.Object.(*cv1.Service); ok {
+					fixService(o)
+					for i := range tree.Services {
+						if tree.Services[i].GetUID() == o.GetUID() {
+							if ev.Type == watch.Deleted {
+								copy(tree.Services[i:], tree.Services[i+1:])
+								tree.Services[len(tree.Services)-1] = nil
+								tree.Services = tree.Services[:len(tree.Services)-1]
+							} else {
+								tree.Services[i] = newService(*o, tree.pods)
+							}
+							break
+						}
+					}
+					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			}
 		}
@@ -321,44 +410,32 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		return tree, err
 	}
 
+	tree.pods = make([]*cv1.Pod, len(pods.Items))
+	for i := range pods.Items {
+		tree.pods[i] = &pods.Items[i]
+	}
 	for _, o := range statefulsets.Items {
-		tree.StatefulSets = append(tree.StatefulSets,
-			&StatefulSet{o, matchPods(pods.Items, o.Spec.Selector.MatchLabels)})
+		tree.StatefulSets = append(tree.StatefulSets, newStatefulSet(o, tree.pods))
 	}
 
 	for _, o := range deployments.Items {
-		tree.Deployments = append(tree.Deployments,
-			&Deployment{o, matchPods(pods.Items, o.Spec.Selector.MatchLabels)})
+		tree.Deployments = append(tree.Deployments, newDeployment(o, tree.pods))
 	}
 
 	for _, o := range daemonsets.Items {
-		tree.DaemonSets = append(tree.DaemonSets,
-			&DaemonSet{o, matchPods(pods.Items, o.Spec.Selector.MatchLabels)})
+		tree.DaemonSets = append(tree.DaemonSets, newDaemonSet(o, tree.pods))
 	}
 
 	for _, o := range jobs.Items {
-		tree.Jobs = append(tree.Jobs,
-			&Job{o, matchPods(pods.Items, o.Spec.Selector.MatchLabels)})
+		tree.Jobs = append(tree.Jobs, newJob(o, tree.pods))
 	}
 
-CRONJOBS:
 	for _, o := range cronjobs.Items {
-		for _, j := range tree.Jobs {
-			for _, owner := range j.GetOwnerReferences() {
-				if owner.UID == o.GetUID() {
-					tree.CronJobs = append(tree.CronJobs,
-						&CronJob{o, matchPods(pods.Items, j.Spec.Selector.MatchLabels)})
-					continue CRONJOBS
-				}
-			}
-		}
-
-		tree.CronJobs = append(tree.CronJobs, &CronJob{o, nil})
+		tree.CronJobs = append(tree.CronJobs, newCronJob(o, tree.pods))
 	}
 
 	for _, o := range services.Items {
-		tree.Services = append(tree.Services,
-			&Service{o, matchPods(pods.Items, o.Spec.Selector)})
+		tree.Services = append(tree.Services, newService(o, tree.pods))
 	}
 
 	return tree, nil
@@ -455,7 +532,7 @@ func (c Client) UpdateObject(object interface{}, data []byte) error {
 	return nil
 }
 
-func matchPods(pods []cv1.Pod, selector map[string]string) []*cv1.Pod {
+func matchPods(pods []*cv1.Pod, selector map[string]string) []*cv1.Pod {
 	if len(selector) == 0 {
 		return nil
 	}
@@ -475,7 +552,7 @@ func matchPods(pods []cv1.Pod, selector map[string]string) []*cv1.Pod {
 			continue
 		}
 
-		matched = append(matched, &pods[i])
+		matched = append(matched, pods[i])
 	}
 
 	return matched
@@ -527,5 +604,48 @@ func fixService(service *cv1.Service) {
 	if service.TypeMeta.Kind == "" {
 		service.TypeMeta.Kind = "Service"
 		service.TypeMeta.APIVersion = "v1"
+	}
+}
+
+func modifyPodInTree(tree *PodTree, pod *cv1.Pod, delete bool) {
+	modifyPodInList(&tree.pods, pod, delete)
+
+	for i := range tree.StatefulSets {
+		modifyPodInList(&tree.StatefulSets[i].pods, pod, delete)
+	}
+
+	for i := range tree.Deployments {
+		modifyPodInList(&tree.Deployments[i].pods, pod, delete)
+	}
+
+	for i := range tree.DaemonSets {
+		modifyPodInList(&tree.DaemonSets[i].pods, pod, delete)
+	}
+
+	for i := range tree.Jobs {
+		modifyPodInList(&tree.Jobs[i].pods, pod, delete)
+	}
+
+	for i := range tree.CronJobs {
+		modifyPodInList(&tree.CronJobs[i].pods, pod, delete)
+	}
+
+	for i := range tree.Services {
+		modifyPodInList(&tree.Services[i].pods, pod, delete)
+	}
+}
+
+func modifyPodInList(pods *[]*cv1.Pod, pod *cv1.Pod, delete bool) {
+	for idx, p := range *pods {
+		if p.GetUID() == pod.GetUID() {
+			if delete {
+				copy((*pods)[idx:], (*pods)[idx+1:])
+				(*pods)[len(*pods)-1] = nil
+				*pods = (*pods)[:len(*pods)-1]
+			} else {
+				(*pods)[idx] = pod
+			}
+			break
+		}
 	}
 }
