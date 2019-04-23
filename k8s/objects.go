@@ -110,8 +110,15 @@ func (c Job) Controller() ObjectMetaGetter {
 	return &c.Job
 }
 
-func newCronJob(o bv1b1.CronJob, allPods []*cv1.Pod) *CronJob {
-	// FIXME: pass in the jobs and use their owner references to match the pods
+func newCronJob(o bv1b1.CronJob, allPods []*cv1.Pod, jobs []*Job) *CronJob {
+	for _, j := range jobs {
+		for _, owner := range j.GetOwnerReferences() {
+			if owner.UID == o.GetUID() {
+				return &CronJob{o, matchPods(allPods, j.Spec.Selector.MatchLabels)}
+			}
+		}
+	}
+
 	return &CronJob{o, nil}
 }
 
@@ -285,7 +292,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 								tree.CronJobs[len(tree.CronJobs)-1] = nil
 								tree.CronJobs = tree.CronJobs[:len(tree.CronJobs)-1]
 							} else {
-								tree.CronJobs[i] = newCronJob(*o, tree.pods)
+								tree.CronJobs[i] = newCronJob(*o, tree.pods, tree.Jobs)
 							}
 							break
 						}
@@ -431,7 +438,7 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 	}
 
 	for _, o := range cronjobs.Items {
-		tree.CronJobs = append(tree.CronJobs, newCronJob(o, tree.pods))
+		tree.CronJobs = append(tree.CronJobs, newCronJob(o, tree.pods, tree.Jobs))
 	}
 
 	for _, o := range services.Items {
