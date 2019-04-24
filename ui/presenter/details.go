@@ -105,7 +105,9 @@ func (p *Details) printObjectSummary(w io.Writer, object interface{}) {
 			fmt.Fprintf(w, "[skyblue::b]Suspend:[white::-] %v\n", *v.Spec.Suspend)
 		}
 		fmt.Fprintf(w, "[skyblue::b]Active:[white::-] %d\n", len(v.Status.Active))
-		fmt.Fprintf(w, "[skyblue::b]Last scheduled:[white::-] %s\n", duration.HumanDuration(time.Since(v.Status.LastScheduleTime.Time)))
+		if v.Status.LastScheduleTime != nil {
+			fmt.Fprintf(w, "[skyblue::b]Last scheduled:[white::-] %s\n", duration.HumanDuration(time.Since(v.Status.LastScheduleTime.Time)))
+		}
 		fmt.Fprintf(w, "[skyblue::b]Age:[white::-] %s\n", duration.HumanDuration(time.Since(v.ObjectMeta.CreationTimestamp.Time)))
 	case *cv1.Service:
 		fmt.Fprintf(w, "[skyblue::b]Type:[white::-] %s\n", v.Spec.Type)
