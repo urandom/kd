@@ -28,7 +28,7 @@ type logData struct {
 	line  []byte
 }
 
-func (c Client) Logs(ctx context.Context, object interface{}, previous bool, container string, colors []string) (<-chan []byte, error) {
+func (c Client) Logs(ctx context.Context, object ObjectMetaGetter, previous bool, container string, colors []string) (<-chan []byte, error) {
 	var pods []*cv1.Pod
 
 	switch v := object.(type) {

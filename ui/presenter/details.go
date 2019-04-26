@@ -29,7 +29,7 @@ func NewDetails(ui *ui.UI, client k8s.Client) *Details {
 	}
 }
 
-func (p *Details) show(object interface{}) tview.Primitive {
+func (p *Details) show(object k8s.ObjectMetaGetter) tview.Primitive {
 	if v, ok := object.(k8s.Controller); ok {
 		object = v.Controller()
 	}
@@ -49,7 +49,7 @@ func (p *Details) show(object interface{}) tview.Primitive {
 	return p.ui.PodData
 }
 
-func (p *Details) printObjectSummary(w io.Writer, object interface{}) {
+func (p *Details) printObjectSummary(w io.Writer, object k8s.ObjectMetaGetter) {
 	switch v := object.(type) {
 	case *cv1.Pod:
 		total := len(v.Status.ContainerStatuses)

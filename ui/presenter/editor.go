@@ -31,7 +31,7 @@ func NewEditor(ui *ui.UI, client k8s.Client) *Editor {
 	}
 }
 
-func (p *Editor) edit(object interface{}) (tview.Primitive, error) {
+func (p *Editor) edit(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
 	objData, err := yaml.Marshal(object)
 	if err != nil {
 		return nil, err

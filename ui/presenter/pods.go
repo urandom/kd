@@ -12,7 +12,6 @@ import (
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
 	cv1 "k8s.io/api/core/v1"
-	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type podsComponent int
@@ -41,7 +40,7 @@ type Pods struct {
 	state  struct {
 		activeComponent podsComponent
 		namespace       string
-		object          interface{}
+		object          k8s.ObjectMetaGetter
 		details         detailsView
 		fullscreen      bool
 	}
@@ -264,7 +263,7 @@ func (p *Pods) populatePods(ns string) error {
 			return
 		}
 
-		p.state.object = ref
+		p.state.object = ref.(k8s.ObjectMetaGetter)
 		p.onFocused(p.ui.PodsTree)
 		if p.cancelWatchFn != nil {
 			p.cancelWatchFn()
@@ -272,12 +271,12 @@ func (p *Pods) populatePods(ns string) error {
 		switch p.state.details {
 		case detailsObject:
 			go func() {
-				focused := p.details.show(ref)
+				focused := p.details.show(p.state.object)
 				p.setDetailsView(focused)
 			}()
 		case detailsEvents:
 			go func() {
-				focused, err := p.events.show(ref)
+				focused, err := p.events.show(p.state.object)
 				p.displayError(err)
 				p.setDetailsView(focused)
 			}()
@@ -285,7 +284,7 @@ func (p *Pods) populatePods(ns string) error {
 			go func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				p.cancelWatchFn = cancel
-				focused, err := p.log.show(ctx, ref, "")
+				focused, err := p.log.show(ctx, p.state.object, "")
 				p.displayError(err)
 				p.setDetailsView(focused)
 			}()
@@ -490,18 +489,6 @@ func primitiveToComponent(p tview.Primitive) podsComponent {
 }
 
 var errNotObjMeta = errors.New("object does not have meta data")
-
-func objectMeta(object interface{}) (meta.Object, error) {
-	if c, ok := object.(k8s.Controller); ok {
-		return c.Controller().GetObjectMeta(), nil
-	}
-
-	if g, ok := object.(k8s.ObjectMetaGetter); ok {
-		return g.GetObjectMeta(), nil
-	}
-
-	return nil, errNotObjMeta
-}
 
 func portsToString(ports []cv1.ServicePort) string {
 	parts := make([]string, len(ports))

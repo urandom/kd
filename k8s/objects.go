@@ -498,7 +498,7 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 	return tree, nil
 }
 
-func (c Client) UpdateObject(object interface{}, data []byte) error {
+func (c Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 	switch v := object.(type) {
 	case *cv1.Pod:
 		update := &cv1.Pod{}

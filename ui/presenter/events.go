@@ -25,12 +25,8 @@ func NewEvents(ui *ui.UI, client k8s.Client) *Events {
 	}
 }
 
-func (p *Events) show(object interface{}) (tview.Primitive, error) {
-	meta, err := objectMeta(object)
-	if err != nil {
-		log.Printf("Error getting meta information from object %T: %v", object, err)
-		return p.ui.PodEvents, err
-	}
+func (p *Events) show(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
+	meta := object.GetObjectMeta()
 
 	log.Printf("Getting events for object %s", meta.GetName())
 	p.ui.StatusBar.SpinText("Loading events", p.ui.App)
