@@ -16,26 +16,32 @@ import (
 	"golang.org/x/xerrors"
 )
 
-type PodGetter interface {
+type PodManager interface {
 	Pods() []*cv1.Pod
+	SetPods([]*cv1.Pod)
 }
 
 type ObjectMetaGetter interface {
 	GetObjectMeta() meta.Object
 }
 
+type Selector map[string]string
+type ControllerFactory func() Controller
+
 type Controller interface {
-	PodGetter
+	PodManager
+	ObjectMetaGetter
 	Controller() ObjectMetaGetter
+	Selector() Selector
 }
 
 type PodTree struct {
-	StatefulSets []*StatefulSet
-	Deployments  []*Deployment
-	DaemonSets   []*DaemonSet
-	Jobs         []*Job
-	CronJobs     []*CronJob
-	Services     []*Service
+	StatefulSets []Controller
+	Deployments  []Controller
+	DaemonSets   []Controller
+	Jobs         []Controller
+	CronJobs     []Controller
+	Services     []Controller
 	pods         []*cv1.Pod
 }
 
@@ -49,12 +55,20 @@ func newStatefulSet(o av1.StatefulSet, allPods []*cv1.Pod) *StatefulSet {
 	return &StatefulSet{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
 }
 
-func (c StatefulSet) Controller() ObjectMetaGetter {
+func (c *StatefulSet) Controller() ObjectMetaGetter {
 	return &c.StatefulSet
 }
 
-func (s StatefulSet) Pods() []*cv1.Pod {
+func (c *StatefulSet) Selector() Selector {
+	return c.Spec.Selector.MatchLabels
+}
+
+func (s *StatefulSet) Pods() []*cv1.Pod {
 	return s.pods
+}
+
+func (s *StatefulSet) SetPods(pods []*cv1.Pod) {
+	s.pods = pods
 }
 
 func newDeployment(o av1.Deployment, allPods []*cv1.Pod) *Deployment {
@@ -67,12 +81,20 @@ type Deployment struct {
 	pods []*cv1.Pod
 }
 
-func (c Deployment) Controller() ObjectMetaGetter {
+func (c *Deployment) Controller() ObjectMetaGetter {
 	return &c.Deployment
 }
 
-func (d Deployment) Pods() []*cv1.Pod {
+func (c *Deployment) Selector() Selector {
+	return c.Spec.Selector.MatchLabels
+}
+
+func (d *Deployment) Pods() []*cv1.Pod {
 	return d.pods
+}
+
+func (s *Deployment) SetPods(pods []*cv1.Pod) {
+	s.pods = pods
 }
 
 type DaemonSet struct {
@@ -85,12 +107,20 @@ func newDaemonSet(o av1.DaemonSet, allPods []*cv1.Pod) *DaemonSet {
 	return &DaemonSet{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
 }
 
-func (c DaemonSet) Controller() ObjectMetaGetter {
+func (c *DaemonSet) Controller() ObjectMetaGetter {
 	return &c.DaemonSet
 }
 
-func (d DaemonSet) Pods() []*cv1.Pod {
+func (c *DaemonSet) Selector() Selector {
+	return c.Spec.Selector.MatchLabels
+}
+
+func (d *DaemonSet) Pods() []*cv1.Pod {
 	return d.pods
+}
+
+func (s *DaemonSet) SetPods(pods []*cv1.Pod) {
+	s.pods = pods
 }
 
 type Job struct {
@@ -103,39 +133,59 @@ func newJob(o bv1.Job, allPods []*cv1.Pod) *Job {
 	return &Job{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
 }
 
-func (j Job) Pods() []*cv1.Pod {
+func (j *Job) Pods() []*cv1.Pod {
 	return j.pods
 }
 
-func (c Job) Controller() ObjectMetaGetter {
+func (s *Job) SetPods(pods []*cv1.Pod) {
+	s.pods = pods
+}
+
+func (c *Job) Controller() ObjectMetaGetter {
 	return &c.Job
+}
+
+func (c *Job) Selector() Selector {
+	return c.Spec.Selector.MatchLabels
 }
 
 type CronJob struct {
 	bv1b1.CronJob
 
-	pods []*cv1.Pod
+	selector Selector
+	pods     []*cv1.Pod
 }
 
-func newCronJob(o bv1b1.CronJob, allPods []*cv1.Pod, jobs []*Job) *CronJob {
-	var pods []*cv1.Pod
+func newCronJob(o bv1b1.CronJob, allPods []*cv1.Pod, jobs []Controller) *CronJob {
+	selector := Selector{}
 	for _, j := range jobs {
-		for _, owner := range j.GetOwnerReferences() {
+		for _, owner := range j.GetObjectMeta().GetOwnerReferences() {
 			if owner.UID == o.GetUID() {
-				pods = append(pods, matchPods(allPods, j.Spec.Selector.MatchLabels)...)
+				for k, v := range j.Selector() {
+					selector[k] = v
+				}
 			}
 		}
 	}
 
-	return &CronJob{o, pods}
+	pods := matchPods(allPods, selector)
+	return &CronJob{o, selector, pods}
 }
 
-func (c CronJob) Controller() ObjectMetaGetter {
+func (c *CronJob) Controller() ObjectMetaGetter {
 	return &c.CronJob
 }
 
-func (c CronJob) Pods() []*cv1.Pod {
+func (c *CronJob) Selector() Selector {
+	return c.selector
+}
+
+func (c *CronJob) Pods() []*cv1.Pod {
 	return c.pods
+}
+
+func (s *CronJob) SetPods(pods []*cv1.Pod) {
+	s.pods = pods
 }
 
 type Service struct {
@@ -148,12 +198,20 @@ func newService(o cv1.Service, allPods []*cv1.Pod) *Service {
 	return &Service{o, matchPods(allPods, o.Spec.Selector)}
 }
 
-func (c Service) Controller() ObjectMetaGetter {
+func (c *Service) Controller() ObjectMetaGetter {
 	return &c.Service
 }
 
-func (s Service) Pods() []*cv1.Pod {
+func (c *Service) Selector() Selector {
+	return c.Spec.Selector
+}
+
+func (s *Service) Pods() []*cv1.Pod {
 	return s.pods
+}
+
+func (s *Service) SetPods(pods []*cv1.Pod) {
+	s.pods = pods
 }
 
 type PodWatcherEvent struct {
@@ -219,151 +277,79 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 			case ev := <-stsw.ResultChan():
 				if o, ok := ev.Object.(*av1.StatefulSet); ok {
 					fixStatefulSet(o)
-					found := false
-					for i := range tree.StatefulSets {
-						if tree.StatefulSets[i].GetUID() == o.GetUID() {
-							if ev.Type == watch.Deleted {
-								copy(tree.StatefulSets[i:], tree.StatefulSets[i+1:])
-								tree.StatefulSets[len(tree.StatefulSets)-1] = nil
-								tree.StatefulSets = tree.StatefulSets[:len(tree.StatefulSets)-1]
-							} else {
-								tree.StatefulSets[i] = newStatefulSet(*o, tree.pods)
-							}
-							found = true
-							break
+					var factory ControllerFactory
+					if ev.Type != watch.Deleted {
+						factory = func() Controller {
+							return newStatefulSet(*o, tree.pods)
 						}
 					}
-					if !found && ev.Type != watch.Deleted {
-						tree.StatefulSets = append(tree.StatefulSets, newStatefulSet(*o, tree.pods))
-						sort.Slice(tree.StatefulSets, func(i, j int) bool {
-							return tree.StatefulSets[i].GetName() < tree.StatefulSets[j].GetName()
-						})
-					}
+					modifyControllerList(&tree.StatefulSets, o, factory)
+
 					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			case ev := <-dw.ResultChan():
 				if o, ok := ev.Object.(*av1.Deployment); ok {
 					fixDeployment(o)
-					found := false
-					for i := range tree.Deployments {
-						if tree.Deployments[i].GetUID() == o.GetUID() {
-							if ev.Type == watch.Deleted {
-								copy(tree.Deployments[i:], tree.Deployments[i+1:])
-								tree.Deployments[len(tree.Deployments)-1] = nil
-								tree.Deployments = tree.Deployments[:len(tree.Deployments)-1]
-							} else {
-								tree.Deployments[i] = newDeployment(*o, tree.pods)
-							}
-							found = true
-							break
+					var factory ControllerFactory
+					if ev.Type != watch.Deleted {
+						factory = func() Controller {
+							return newDeployment(*o, tree.pods)
 						}
 					}
-					if !found && ev.Type != watch.Deleted {
-						tree.Deployments = append(tree.Deployments, newDeployment(*o, tree.pods))
-						sort.Slice(tree.Deployments, func(i, j int) bool {
-							return tree.Deployments[i].GetName() < tree.Deployments[j].GetName()
-						})
-					}
+					modifyControllerList(&tree.Deployments, o, factory)
+
 					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			case ev := <-dsw.ResultChan():
 				if o, ok := ev.Object.(*av1.DaemonSet); ok {
 					fixDaemonSet(o)
-					found := false
-					for i := range tree.DaemonSets {
-						if tree.DaemonSets[i].GetUID() == o.GetUID() {
-							if ev.Type == watch.Deleted {
-								copy(tree.DaemonSets[i:], tree.DaemonSets[i+1:])
-								tree.DaemonSets[len(tree.DaemonSets)-1] = nil
-								tree.DaemonSets = tree.DaemonSets[:len(tree.DaemonSets)-1]
-							} else {
-								tree.DaemonSets[i] = newDaemonSet(*o, tree.pods)
-							}
-							found = true
-							break
+					var factory ControllerFactory
+					if ev.Type != watch.Deleted {
+						factory = func() Controller {
+							return newDaemonSet(*o, tree.pods)
 						}
 					}
-					if !found && ev.Type != watch.Deleted {
-						tree.DaemonSets = append(tree.DaemonSets, newDaemonSet(*o, tree.pods))
-						sort.Slice(tree.DaemonSets, func(i, j int) bool {
-							return tree.DaemonSets[i].GetName() < tree.DaemonSets[j].GetName()
-						})
-					}
+					modifyControllerList(&tree.DaemonSets, o, factory)
+
 					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			case ev := <-jw.ResultChan():
 				if o, ok := ev.Object.(*bv1.Job); ok {
 					fixJob(o)
-					found := false
-					for i := range tree.Jobs {
-						if tree.Jobs[i].GetUID() == o.GetUID() {
-							if ev.Type == watch.Deleted {
-								copy(tree.Jobs[i:], tree.Jobs[i+1:])
-								tree.Jobs[len(tree.Jobs)-1] = nil
-								tree.Jobs = tree.Jobs[:len(tree.Jobs)-1]
-							} else {
-								tree.Jobs[i] = newJob(*o, tree.pods)
-							}
-							found = true
-							break
+					var factory ControllerFactory
+					if ev.Type != watch.Deleted {
+						factory = func() Controller {
+							return newJob(*o, tree.pods)
 						}
 					}
-					if !found && ev.Type != watch.Deleted {
-						tree.Jobs = append(tree.Jobs, newJob(*o, tree.pods))
-						sort.Slice(tree.Jobs, func(i, j int) bool {
-							return tree.Jobs[i].GetName() < tree.Jobs[j].GetName()
-						})
-					}
+					modifyControllerList(&tree.Jobs, o, factory)
+
 					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			case ev := <-cjw.ResultChan():
 				if o, ok := ev.Object.(*bv1b1.CronJob); ok {
 					fixCronJob(o)
-					found := false
-					for i := range tree.CronJobs {
-						if tree.CronJobs[i].GetUID() == o.GetUID() {
-							if ev.Type == watch.Deleted {
-								copy(tree.CronJobs[i:], tree.CronJobs[i+1:])
-								tree.CronJobs[len(tree.CronJobs)-1] = nil
-								tree.CronJobs = tree.CronJobs[:len(tree.CronJobs)-1]
-							} else {
-								tree.CronJobs[i] = newCronJob(*o, tree.pods, tree.Jobs)
-							}
-							found = true
-							break
+					var factory ControllerFactory
+					if ev.Type != watch.Deleted {
+						factory = func() Controller {
+							return newCronJob(*o, tree.pods, tree.Jobs)
 						}
 					}
-					if !found && ev.Type != watch.Deleted {
-						tree.CronJobs = append(tree.CronJobs, newCronJob(*o, tree.pods, tree.Jobs))
-						sort.Slice(tree.CronJobs, func(i, j int) bool {
-							return tree.CronJobs[i].GetName() < tree.CronJobs[j].GetName()
-						})
-					}
+					modifyControllerList(&tree.CronJobs, o, factory)
+
 					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			case ev := <-sw.ResultChan():
 				if o, ok := ev.Object.(*cv1.Service); ok {
 					fixService(o)
-					found := false
-					for i := range tree.Services {
-						if tree.Services[i].GetUID() == o.GetUID() {
-							if ev.Type == watch.Deleted {
-								copy(tree.Services[i:], tree.Services[i+1:])
-								tree.Services[len(tree.Services)-1] = nil
-								tree.Services = tree.Services[:len(tree.Services)-1]
-							} else {
-								tree.Services[i] = newService(*o, tree.pods)
-							}
-							found = true
-							break
+					var factory ControllerFactory
+					if ev.Type != watch.Deleted {
+						factory = func() Controller {
+							return newService(*o, tree.pods)
 						}
 					}
-					if !found && ev.Type != watch.Deleted {
-						tree.Services = append(tree.Services, newService(*o, tree.pods))
-						sort.Slice(tree.Services, func(i, j int) bool {
-							return tree.Services[i].GetName() < tree.Services[j].GetName()
-						})
-					}
+					modifyControllerList(&tree.Services, o, factory)
+
 					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			}
@@ -665,59 +651,67 @@ func fixService(service *cv1.Service) {
 }
 
 func modifyPodInTree(tree *PodTree, pod *cv1.Pod, delete bool) {
-	modifyPodInList(&tree.pods, pod, delete, nil)
+	tree.pods = modifyPodInList(tree.pods, pod, delete, nil, true)
 
 	for i := range tree.StatefulSets {
-		modifyPodInList(&tree.StatefulSets[i].pods, pod, delete,
-			tree.StatefulSets[i].Spec.Selector.MatchLabels)
+		tree.StatefulSets[i].SetPods(
+			modifyPodInList(
+				tree.StatefulSets[i].Pods(), pod, delete,
+				tree.StatefulSets[i].Selector(), false),
+		)
 	}
 
 	for i := range tree.Deployments {
-		modifyPodInList(&tree.Deployments[i].pods, pod, delete,
-			tree.Deployments[i].Spec.Selector.MatchLabels)
+		tree.Deployments[i].SetPods(
+			modifyPodInList(
+				tree.Deployments[i].Pods(), pod, delete,
+				tree.Deployments[i].Selector(), false),
+		)
 	}
 
 	for i := range tree.DaemonSets {
-		modifyPodInList(&tree.DaemonSets[i].pods, pod, delete,
-			tree.DaemonSets[i].Spec.Selector.MatchLabels)
+		tree.DaemonSets[i].SetPods(
+			modifyPodInList(
+				tree.DaemonSets[i].Pods(), pod, delete,
+				tree.DaemonSets[i].Selector(), false),
+		)
 	}
 
 	for i := range tree.Jobs {
-		modifyPodInList(&tree.Jobs[i].pods, pod, delete,
-			tree.Jobs[i].Spec.Selector.MatchLabels)
+		tree.Jobs[i].SetPods(
+			modifyPodInList(
+				tree.Jobs[i].Pods(), pod, delete,
+				tree.Jobs[i].Selector(), false),
+		)
 	}
 
 	for i := range tree.CronJobs {
-		labels := map[string]string{}
-		for _, j := range tree.Jobs {
-			for _, owner := range j.GetOwnerReferences() {
-				if owner.UID == tree.CronJobs[i].GetUID() {
-					for k, v := range j.Spec.Selector.MatchLabels {
-						labels[k] = v
-					}
-				}
-			}
-		}
-
-		modifyPodInList(&tree.CronJobs[i].pods, pod, delete, labels)
+		tree.CronJobs[i].SetPods(
+			modifyPodInList(
+				tree.CronJobs[i].Pods(), pod, delete,
+				tree.CronJobs[i].Selector(), false),
+		)
 	}
 
 	for i := range tree.Services {
-		modifyPodInList(&tree.Services[i].pods, pod, delete,
-			tree.Services[i].Spec.Selector)
+		tree.Services[i].SetPods(
+			modifyPodInList(
+				tree.Services[i].Pods(), pod, delete,
+				tree.Services[i].Selector(), false),
+		)
 	}
 }
 
-func modifyPodInList(pods *[]*cv1.Pod, pod *cv1.Pod, delete bool, labels map[string]string) {
+func modifyPodInList(pods []*cv1.Pod, pod *cv1.Pod, delete bool, labels map[string]string, forceMatch bool) []*cv1.Pod {
 	found := false
-	for idx, p := range *pods {
+	for idx, p := range pods {
 		if p.GetUID() == pod.GetUID() {
 			if delete {
-				copy((*pods)[idx:], (*pods)[idx+1:])
-				(*pods)[len(*pods)-1] = nil
-				*pods = (*pods)[:len(*pods)-1]
+				copy(pods[idx:], pods[idx+1:])
+				pods[len(pods)-1] = nil
+				pods = pods[:len(pods)-1]
 			} else {
-				(*pods)[idx] = pod
+				pods[idx] = pod
 			}
 			found = true
 			break
@@ -725,19 +719,45 @@ func modifyPodInList(pods *[]*cv1.Pod, pod *cv1.Pod, delete bool, labels map[str
 	}
 
 	if !found && !delete {
-		if labels == nil {
-			*pods = append(*pods, pod)
-			sort.Slice(*pods, func(i, j int) bool {
-				return (*pods)[i].GetName() < (*pods)[j].GetName()
+		if forceMatch {
+			pods = append(pods, pod)
+			sort.Slice(pods, func(i, j int) bool {
+				return pods[i].GetName() < pods[j].GetName()
 			})
 		} else {
 			selected := matchPods([]*cv1.Pod{pod}, labels)
 			if len(selected) > 0 {
-				*pods = append(*pods, pod)
-				sort.Slice(*pods, func(i, j int) bool {
-					return (*pods)[i].GetName() < (*pods)[j].GetName()
+				pods = append(pods, pod)
+				sort.Slice(pods, func(i, j int) bool {
+					return pods[i].GetName() < pods[j].GetName()
 				})
 			}
 		}
+	}
+
+	return pods
+}
+
+func modifyControllerList(controllers *[]Controller, o ObjectMetaGetter, factory ControllerFactory) {
+	found := false
+	for i := range *controllers {
+		if (*controllers)[i].GetObjectMeta().GetUID() == o.GetObjectMeta().GetUID() {
+			if factory == nil {
+				copy((*controllers)[i:], (*controllers)[i+1:])
+				(*controllers)[len(*controllers)-1] = nil
+				*controllers = (*controllers)[:len(*controllers)-1]
+			} else {
+				(*controllers)[i] = factory()
+			}
+		}
+		found = true
+		break
+	}
+
+	if !found && factory != nil {
+		(*controllers) = append(*controllers, factory())
+		sort.Slice(*controllers, func(i, j int) bool {
+			return (*controllers)[i].GetObjectMeta().GetName() < (*controllers)[i].GetObjectMeta().GetName()
+		})
 	}
 }

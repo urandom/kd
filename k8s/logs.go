@@ -34,7 +34,7 @@ func (c Client) Logs(ctx context.Context, object ObjectMetaGetter, previous bool
 	switch v := object.(type) {
 	case *cv1.Pod:
 		pods = append(pods, v)
-	case PodGetter:
+	case PodManager:
 		pods = v.Pods()
 	}
 
