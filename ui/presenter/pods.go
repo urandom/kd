@@ -399,6 +399,13 @@ func (p *Pods) initKeybindings() {
 		case tcell.KeyF5:
 			p.refreshFocused()
 			return nil
+		case tcell.KeyF6:
+			if _, ok := p.state.object.(k8s.Controller); !ok && p.state.object != nil {
+				go func() {
+					p.displayError(p.editor.delete(p.state.object))
+				}()
+				return nil
+			}
 		case tcell.KeyF10:
 			p.ui.App.Stop()
 			return nil
@@ -443,6 +450,9 @@ func (p *Pods) buttonsForPodsTree() {
 		}
 	}
 	p.ui.ActionBar.AddAction(5, "Refresh")
+	if _, ok := p.state.object.(k8s.Controller); p.state.object != nil && !ok {
+		p.ui.ActionBar.AddAction(6, "Delete")
+	}
 	p.ui.ActionBar.AddAction(10, "Quit")
 }
 
@@ -459,6 +469,9 @@ func (p *Pods) buttonsForPodsDetails() {
 			p.ui.ActionBar.AddAction(4, "View")
 		}
 		p.ui.ActionBar.AddAction(5, "Refresh")
+		if _, ok := p.state.object.(k8s.Controller); !ok {
+			p.ui.ActionBar.AddAction(6, "Delete")
+		}
 	}
 	p.ui.ActionBar.AddAction(10, "Quit")
 }

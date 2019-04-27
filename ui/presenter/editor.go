@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
@@ -90,6 +91,13 @@ func (p *Editor) viewLog() (err error) {
 	})
 
 	return err
+}
+
+func (p *Editor) delete(object k8s.ObjectMetaGetter) (err error) {
+	p.ui.StatusBar.SpinText("Deleting "+object.GetObjectMeta().GetName(), p.ui.App)
+	defer p.ui.StatusBar.StopSpin()
+
+	return p.client.DeleteObject(object, time.Minute)
 }
 
 func externalEditor(text []byte, readBack bool) ([]byte, error) {

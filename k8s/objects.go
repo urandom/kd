@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"sort"
+	"time"
 
 	av1 "k8s.io/api/apps/v1"
 	bv1 "k8s.io/api/batch/v1"
@@ -570,6 +571,35 @@ func (c Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 		}
 
 		v.Service = *update
+	}
+
+	return nil
+}
+
+func (c Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) error {
+	propagation := meta.DeletePropagationForeground
+	switch v := object.(type) {
+	case *cv1.Pod:
+		err := c.CoreV1().Pods(v.GetNamespace()).Delete(v.GetName(), &meta.DeleteOptions{PropagationPolicy: &propagation})
+		if err != nil {
+			return xerrors.Errorf("deleting pod %s: %w", v.GetName(), err)
+		}
+
+		pw, err := c.CoreV1().Pods(v.GetNamespace()).Watch(meta.ListOptions{FieldSelector: "metadata.name=" + v.GetName()})
+		if err != nil {
+			return xerrors.Errorf("getting pod watcher: %w", err)
+		}
+		for {
+			select {
+			case <-time.After(timeout):
+				pw.Stop()
+				return nil
+			case ev := <-pw.ResultChan():
+				if ev.Type == watch.Deleted {
+					return nil
+				}
+			}
+		}
 	}
 
 	return nil
