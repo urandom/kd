@@ -5,14 +5,12 @@ import (
 )
 
 const (
-	PageK8sError = "error-k8s"
-	PagePicker   = "picker"
-	PagePods     = "pods"
+	PageModal  = "modal"
+	PagePicker = "picker"
+	PagePods   = "pods"
 )
 
 func (ui *UI) setupPages() {
-	ui.ErrorModal = tview.NewModal()
-	ui.ErrorModal.SetTitle("Error")
 	ui.NamespaceDropDown = tview.NewDropDown().SetLabel("Namespace [CTRL-N[]: ")
 	ui.Picker = NewModalList()
 	ui.Picker.List().SetBackgroundColor(tview.Styles.ContrastBackgroundColor).SetBorder(true)
@@ -38,7 +36,6 @@ func (ui *UI) setupPages() {
 			AddItem(ui.StatusBar, 1, 0, false).
 			AddItem(ui.ActionBar, 1, 0, false),
 		true, false).
-		AddPage(PagePicker, ui.Picker, true, false).
-		AddPage(PageK8sError, ui.ErrorModal, true, false)
+		AddPage(PagePicker, ui.Picker, true, false)
 
 }

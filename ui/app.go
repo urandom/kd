@@ -7,7 +7,6 @@ import (
 type UI struct {
 	App               *tview.Application
 	Pages             *tview.Pages
-	ErrorModal        *tview.Modal
 	NamespaceDropDown *tview.DropDown
 	Picker            ModalList
 	PodsTree          *tview.TreeView

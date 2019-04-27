@@ -41,7 +41,7 @@ func (p *Error) displayError(err error) bool {
 	if err == nil {
 		if p.isModalVisible {
 			p.ui.App.QueueUpdateDraw(func() {
-				p.ui.Pages.HidePage(ui.PageK8sError)
+				p.ui.Pages.RemovePage(ui.PageModal)
 			})
 		}
 		return false
@@ -59,8 +59,10 @@ func (p *Error) displayError(err error) bool {
 		buttons = append(buttons, buttonRetry)
 	}
 
+	errorModal := tview.NewModal()
+	errorModal.SetTitle("Error")
 	p.ui.App.QueueUpdateDraw(func() {
-		p.ui.ErrorModal.
+		errorModal.
 			SetText(fmt.Sprintf("Error: %s", err)).
 			//ClearButtons().
 			AddButtons(buttons).
@@ -75,14 +77,16 @@ func (p *Error) displayError(err error) bool {
 					fallthrough
 				case buttonClose:
 					p.isModalVisible = false
-					p.ui.Pages.HidePage(ui.PageK8sError)
+					p.ui.Pages.HidePage(ui.PageModal)
 					p.ui.App.SetFocus(p.focused)
 				}
 			})
 		p.isModalVisible = true
 		p.focused = p.ui.App.GetFocus()
-		p.ui.Pages.ShowPage(ui.PageK8sError)
-		p.ui.App.SetFocus(p.ui.ErrorModal)
+
+		p.ui.Pages.AddPage(ui.PageModal, errorModal, true, false)
+		p.ui.Pages.ShowPage(ui.PageModal)
+		p.ui.App.SetFocus(errorModal)
 	})
 
 	return true
