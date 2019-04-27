@@ -32,16 +32,17 @@ type Error struct {
 const (
 	buttonQuit    = "Quit"
 	buttonClose   = "Close"
+	buttonConfirm = "Confirm"
 	buttonRetry   = "Retry"
-	buttonRefresh = "Refre"
-	buttonEmpty   = "      "
 )
 
 func (p *Error) displayError(err error) bool {
 	if err == nil {
 		if p.isModalVisible {
 			p.ui.App.QueueUpdateDraw(func() {
+				p.isModalVisible = false
 				p.ui.Pages.RemovePage(ui.PageModal)
+				p.ui.App.SetFocus(p.focused)
 			})
 		}
 		return false
@@ -64,7 +65,6 @@ func (p *Error) displayError(err error) bool {
 	p.ui.App.QueueUpdateDraw(func() {
 		errorModal.
 			SetText(fmt.Sprintf("Error: %s", err)).
-			//ClearButtons().
 			AddButtons(buttons).
 			SetDoneFunc(func(idx int, label string) {
 				switch label {
@@ -77,7 +77,7 @@ func (p *Error) displayError(err error) bool {
 					fallthrough
 				case buttonClose:
 					p.isModalVisible = false
-					p.ui.Pages.HidePage(ui.PageModal)
+					p.ui.Pages.RemovePage(ui.PageModal)
 					p.ui.App.SetFocus(p.focused)
 				}
 			})
@@ -90,6 +90,40 @@ func (p *Error) displayError(err error) bool {
 	})
 
 	return true
+}
+
+type Confirm struct {
+	ui *ui.UI
+
+	isModalVisible bool
+	focused        tview.Primitive
+}
+
+func (p *Confirm) displayConfirm(title, message string) <-chan bool {
+	buttons := []string{buttonClose, buttonConfirm}
+
+	modal := tview.NewModal()
+	modal.SetTitle(title)
+	ch := make(chan bool)
+	p.ui.App.QueueUpdateDraw(func() {
+		modal.
+			SetText(message).
+			AddButtons(buttons).
+			SetDoneFunc(func(idx int, label string) {
+				ch <- label == buttonConfirm
+				p.isModalVisible = false
+				p.ui.Pages.RemovePage(ui.PageModal)
+				p.ui.App.SetFocus(p.focused)
+			})
+		p.isModalVisible = true
+		p.focused = p.ui.App.GetFocus()
+
+		p.ui.Pages.AddPage(ui.PageModal, modal, true, false)
+		p.ui.Pages.ShowPage(ui.PageModal)
+		p.ui.App.SetFocus(modal)
+	})
+
+	return ch
 }
 
 type Picker struct {

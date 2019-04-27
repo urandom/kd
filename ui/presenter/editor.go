@@ -21,14 +21,16 @@ import (
 )
 
 type Editor struct {
-	ui     *ui.UI
-	client k8s.Client
+	ui      *ui.UI
+	client  k8s.Client
+	confirm *Confirm
 }
 
 func NewEditor(ui *ui.UI, client k8s.Client) *Editor {
 	return &Editor{
-		ui:     ui,
-		client: client,
+		ui:      ui,
+		client:  client,
+		confirm: &Confirm{ui: ui},
 	}
 }
 
@@ -94,6 +96,12 @@ func (p *Editor) viewLog() (err error) {
 }
 
 func (p *Editor) delete(object k8s.ObjectMetaGetter) (err error) {
+	if !<-p.confirm.displayConfirm(
+		"Warning",
+		"Are you sure you want to delete "+object.GetObjectMeta().GetName()+"?",
+	) {
+		return nil
+	}
 	p.ui.StatusBar.SpinText("Deleting "+object.GetObjectMeta().GetName(), p.ui.App)
 	defer p.ui.StatusBar.StopSpin()
 
