@@ -325,6 +325,10 @@ func (p *Pods) initKeybindings() {
 			case p.ui.PodData, p.ui.PodEvents:
 				toFocus = p.ui.PodsTree
 			default:
+				// Buttons are usually in a modal and are set to cycle
+				if _, ok := p.ui.App.GetFocus().(*tview.Button); ok {
+					return event
+				}
 				toFocus = p.ui.PodsTree
 			}
 			p.ui.App.SetFocus(toFocus)
