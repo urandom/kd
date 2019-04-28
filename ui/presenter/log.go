@@ -32,10 +32,11 @@ func (p *Log) show(ctx context.Context, object k8s.ObjectMetaGetter, container s
 	p.ui.App.QueueUpdateDraw(func() {
 		p.ui.PodData.Clear().SetRegions(false).SetDynamicColors(true)
 	})
-	data, err := p.client.Logs(ctx, object, false, container, []string{"yellow", "aqua", "chartreuse"})
+	data, err := p.client.Logs(ctx, object, container, []string{"yellow", "aqua", "chartreuse"})
 	if err != nil {
 		if xerrors.As(err, &k8s.ErrMultipleContainers{}) {
 			names := err.(k8s.ErrMultipleContainers).Containers
+			p.ui.StatusBar.StopSpin()
 			container := <-p.picker.PickFrom("Containers", names)
 			return p.show(ctx, object, container)
 		} else {

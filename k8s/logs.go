@@ -28,7 +28,9 @@ type logData struct {
 	line  []byte
 }
 
-func (c Client) Logs(ctx context.Context, object ObjectMetaGetter, previous bool, container string, colors []string) (<-chan []byte, error) {
+const previousPrefix = "previous:"
+
+func (c Client) Logs(ctx context.Context, object ObjectMetaGetter, container string, colors []string) (<-chan []byte, error) {
 	var pods []*cv1.Pod
 
 	switch v := object.(type) {
@@ -42,20 +44,28 @@ func (c Client) Logs(ctx context.Context, object ObjectMetaGetter, previous bool
 		return nil, nil
 	}
 
-	if len(pods[0].Spec.Containers) > 1 {
-		names := make([]string, len(pods[0].Spec.Containers))
-		for i, c := range pods[0].Spec.Containers {
-			if c.Name == container {
-				names = nil
-				break
-			}
-			names[i] = c.Name
+	var previous bool
+	if strings.HasPrefix(container, previousPrefix) {
+		previous = true
+		container = container[len(previousPrefix):]
+	}
+
+	names := make([]string, 0, len(pods[0].Status.ContainerStatuses))
+	for _, c := range pods[0].Status.ContainerStatuses {
+		if c.Name == container {
+			names = nil
+			break
 		}
-		if names != nil {
-			return nil, ErrMultipleContainers{
-				errors.New("multiple containers"),
-				names,
-			}
+		names = append(names, c.Name)
+		if c.LastTerminationState.Terminated != nil {
+			names = append(names, previousPrefix+c.Name)
+		}
+
+	}
+	if len(names) > 1 {
+		return nil, ErrMultipleContainers{
+			errors.New("multiple containers"),
+			names,
 		}
 	}
 
