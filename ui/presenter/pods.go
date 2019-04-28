@@ -311,6 +311,10 @@ func (p *Pods) setDetailsView(object tview.Primitive) {
 
 func (p *Pods) initKeybindings() {
 	p.ui.App.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch p.ui.App.GetFocus().(type) {
+		case *tview.Button, *tview.InputField:
+			return event
+		}
 		switch event.Key() {
 		case tcell.KeyTab, tcell.KeyBacktab:
 			var toFocus tview.Primitive
@@ -325,10 +329,6 @@ func (p *Pods) initKeybindings() {
 			case p.ui.PodData, p.ui.PodEvents:
 				toFocus = p.ui.PodsTree
 			default:
-				switch p.ui.App.GetFocus().(type) {
-				case *tview.Button, *tview.InputField:
-					return event
-				}
 				toFocus = p.ui.PodsTree
 			}
 			p.ui.App.SetFocus(toFocus)
