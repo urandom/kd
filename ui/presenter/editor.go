@@ -8,9 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
@@ -23,14 +25,16 @@ import (
 type Editor struct {
 	ui      *ui.UI
 	client  k8s.Client
-	confirm *Confirm
+	confirm Confirm
+	form    Form
 }
 
 func NewEditor(ui *ui.UI, client k8s.Client) *Editor {
 	return &Editor{
 		ui:      ui,
 		client:  client,
-		confirm: &Confirm{ui: ui},
+		confirm: NewConfirm(ui),
+		form:    NewForm(ui),
 	}
 }
 
@@ -96,7 +100,7 @@ func (p *Editor) viewLog() (err error) {
 }
 
 func (p *Editor) delete(object k8s.ObjectMetaGetter) (err error) {
-	if !<-p.confirm.displayConfirm(
+	if !<-p.confirm.DisplayConfirm(
 		"Warning",
 		"Are you sure you want to delete "+object.GetObjectMeta().GetName()+"?",
 	) {
@@ -106,6 +110,52 @@ func (p *Editor) delete(object k8s.ObjectMetaGetter) (err error) {
 	defer p.ui.StatusBar.StopSpin()
 
 	return p.client.DeleteObject(object, time.Minute)
+}
+
+func (p *Editor) scaleDeployment(d *k8s.Deployment) (err error) {
+	replicas := int(*d.Spec.Replicas)
+	newReplicas := replicas
+	done := make(chan struct{})
+
+	p.form.DisplayForm(func(form *tview.Form) {
+		form.SetBorder(true).SetTitle("Scale deployment")
+
+		form.
+			AddInputField("Replicas", strconv.Itoa(replicas), 20, func(text string, lastChar rune) bool {
+				return unicode.IsDigit(lastChar)
+			}, func(text string) {
+				if text == "" {
+					return
+				}
+				newReplicas, err = strconv.Atoi(text)
+				if err != nil {
+					err = xerrors.Errorf("converting %s to number: %w", text, err)
+				}
+			}).
+			AddButton(buttonClose, func() {
+				newReplicas = replicas
+				close(done)
+				go p.form.Close()
+			}).
+			AddButton(buttonOk, func() {
+				close(done)
+				go p.form.Close()
+			})
+	})
+
+	<-done
+	if err != nil || newReplicas == replicas {
+		return err
+	}
+
+	err = p.client.ScaleDeployment(d, newReplicas)
+	if err != nil {
+		return UserRetryableError{err, func() error {
+			return p.scaleDeployment(d)
+		}}
+	}
+
+	return nil
 }
 
 func externalEditor(text []byte, readBack bool) ([]byte, error) {

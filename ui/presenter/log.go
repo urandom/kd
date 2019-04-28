@@ -12,14 +12,14 @@ import (
 )
 
 type Log struct {
-	picker *Picker
+	picker Picker
 	ui     *ui.UI
 	client k8s.Client
 }
 
 func NewLog(ui *ui.UI, client k8s.Client) *Log {
 	return &Log{
-		picker: &Picker{ui: ui},
+		picker: NewPicker(ui),
 		ui:     ui,
 		client: client,
 	}

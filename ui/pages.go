@@ -5,15 +5,12 @@ import (
 )
 
 const (
-	PageModal  = "modal"
-	PagePicker = "picker"
-	PagePods   = "pods"
+	PageModal = "modal"
+	PagePods  = "pods"
 )
 
 func (ui *UI) setupPages() {
 	ui.NamespaceDropDown = tview.NewDropDown().SetLabel("Namespace [CTRL-N[]: ")
-	ui.Picker = NewModalList()
-	ui.Picker.List().SetBackgroundColor(tview.Styles.ContrastBackgroundColor).SetBorder(true)
 	ui.PodsTree = tview.NewTreeView().SetTopLevel(1).SetRoot(tview.NewTreeNode("."))
 	ui.PodsTree.SetBorder(true).SetTitle("Pods")
 	ui.PodsDetails = tview.NewFlex()
@@ -35,7 +32,6 @@ func (ui *UI) setupPages() {
 				0, 1, true).
 			AddItem(ui.StatusBar, 1, 0, false).
 			AddItem(ui.ActionBar, 1, 0, false),
-		true, false).
-		AddPage(PagePicker, ui.Picker, true, false)
+		true, false)
 
 }

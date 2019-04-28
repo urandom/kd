@@ -30,7 +30,7 @@ const (
 )
 
 type Pods struct {
-	*Error
+	Error
 	details *Details
 	events  *Events
 	log     *Log
@@ -50,7 +50,7 @@ type Pods struct {
 
 func NewPods(ui *ui.UI, client k8s.Client) *Pods {
 	p := &Pods{
-		Error:   &Error{ui: ui},
+		Error:   NewError(ui),
 		details: NewDetails(ui, client),
 		events:  NewEvents(ui, client),
 		log:     NewLog(ui, client),
@@ -87,7 +87,7 @@ func (p *Pods) populateNamespaces() error {
 					if text == AllNamespaces {
 						text = ""
 					}
-					p.displayError(p.populatePods(text))
+					p.DisplayError(p.populatePods(text))
 				}()
 			})
 			found := false
@@ -277,7 +277,7 @@ func (p *Pods) populatePods(ns string) error {
 		case detailsEvents:
 			go func() {
 				focused, err := p.events.show(p.state.object)
-				p.displayError(err)
+				p.DisplayError(err)
 				p.setDetailsView(focused)
 			}()
 		case detailsLog:
@@ -285,7 +285,7 @@ func (p *Pods) populatePods(ns string) error {
 				ctx, cancel := context.WithCancel(context.Background())
 				p.cancelWatchFn = cancel
 				focused, err := p.log.show(ctx, p.state.object, "")
-				p.displayError(err)
+				p.DisplayError(err)
 				p.setDetailsView(focused)
 			}()
 		}
@@ -325,8 +325,8 @@ func (p *Pods) initKeybindings() {
 			case p.ui.PodData, p.ui.PodEvents:
 				toFocus = p.ui.PodsTree
 			default:
-				// Buttons are usually in a modal and are set to cycle
-				if _, ok := p.ui.App.GetFocus().(*tview.Button); ok {
+				switch p.ui.App.GetFocus().(type) {
+				case *tview.Button, *tview.InputField:
 					return event
 				}
 				toFocus = p.ui.PodsTree
@@ -360,7 +360,7 @@ func (p *Pods) initKeybindings() {
 						p.cancelWatchFn()
 					}
 					focused, err := p.events.show(p.state.object)
-					p.displayError(err)
+					p.DisplayError(err)
 					p.state.details = detailsEvents
 					p.ui.App.SetFocus(focused)
 					p.setDetailsView(focused)
@@ -377,7 +377,7 @@ func (p *Pods) initKeybindings() {
 					p.cancelWatchFn = cancel
 
 					focused, err := p.log.show(ctx, p.state.object, "")
-					p.displayError(err)
+					p.DisplayError(err)
 					p.state.details = detailsLog
 					p.ui.App.SetFocus(focused)
 					p.setDetailsView(focused)
@@ -390,12 +390,12 @@ func (p *Pods) initKeybindings() {
 				case detailsObject:
 					go func() {
 						_, err := p.editor.edit(p.state.object)
-						p.displayError(err)
+						p.DisplayError(err)
 					}()
 				case detailsEvents:
 				case detailsLog:
 					go func() {
-						p.displayError(p.editor.viewLog())
+						p.DisplayError(p.editor.viewLog())
 					}()
 				}
 				return nil
@@ -406,7 +406,14 @@ func (p *Pods) initKeybindings() {
 		case tcell.KeyF6:
 			if _, ok := p.state.object.(k8s.Controller); !ok && p.state.object != nil {
 				go func() {
-					p.displayError(p.editor.delete(p.state.object))
+					p.DisplayError(p.editor.delete(p.state.object))
+				}()
+				return nil
+			}
+		case tcell.KeyF7:
+			if d, ok := p.state.object.(*k8s.Deployment); ok {
+				go func() {
+					p.DisplayError(p.editor.scaleDeployment(d))
 				}()
 				return nil
 			}
@@ -454,8 +461,11 @@ func (p *Pods) buttonsForPodsTree() {
 		}
 	}
 	p.ui.ActionBar.AddAction(5, "Refresh")
-	if _, ok := p.state.object.(k8s.Controller); p.state.object != nil && !ok {
+	if _, ok := p.state.object.(k8s.Controller); !ok {
 		p.ui.ActionBar.AddAction(6, "Delete")
+	}
+	if _, ok := p.state.object.(*k8s.Deployment); ok {
+		p.ui.ActionBar.AddAction(7, "Scale")
 	}
 	p.ui.ActionBar.AddAction(10, "Quit")
 }
@@ -476,6 +486,9 @@ func (p *Pods) buttonsForPodsDetails() {
 		if _, ok := p.state.object.(k8s.Controller); !ok {
 			p.ui.ActionBar.AddAction(6, "Delete")
 		}
+		if _, ok := p.state.object.(*k8s.Deployment); ok {
+			p.ui.ActionBar.AddAction(7, "Scale")
+		}
 	}
 	p.ui.ActionBar.AddAction(10, "Quit")
 }
@@ -484,7 +497,7 @@ func (p *Pods) refreshFocused() {
 	switch p.state.activeComponent {
 	case podsTree:
 		go func() {
-			p.displayError(p.populatePods(p.state.namespace))
+			p.DisplayError(p.populatePods(p.state.namespace))
 		}()
 	case podsDetails:
 		switch p.state.details {

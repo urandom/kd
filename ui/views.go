@@ -74,21 +74,50 @@ func (s StatusBar) StopSpin() {
 	}
 }
 
-type ModalList struct {
+type Modal struct {
 	*tview.Grid
+}
+
+func NewModal(p tview.Primitive) Modal {
+	return Modal{
+		tview.NewGrid().SetRows(0, 0, 0).SetColumns(0, 0, 0).
+			AddItem(p, 1, 1, 1, 1, 0, 0, true),
+	}
+}
+
+type ModalList struct {
+	Modal
 
 	list *tview.List
 }
 
 func NewModalList() ModalList {
 	list := tview.NewList()
-	return ModalList{
-		tview.NewGrid().SetRows(0, 0, 0).SetColumns(0, 0, 0).
-			AddItem(list, 1, 1, 1, 1, 0, 0, true),
-		list,
-	}
+	return ModalList{NewModal(list), list}
 }
 
 func (m ModalList) List() *tview.List {
 	return m.list
+}
+
+type ModalForm struct {
+	Modal
+
+	form *tview.Form
+}
+
+func NewModalForm() ModalForm {
+	form := tview.NewForm().
+		SetButtonsAlign(tview.AlignCenter).
+		SetButtonBackgroundColor(tview.Styles.PrimitiveBackgroundColor).
+		SetButtonTextColor(tview.Styles.PrimaryTextColor)
+	form.
+		SetBackgroundColor(tview.Styles.ContrastBackgroundColor).
+		SetBorderPadding(0, 0, 0, 0)
+
+	return ModalForm{NewModal(form), form}
+}
+
+func (m ModalForm) Form() *tview.Form {
+	return m.form
 }
