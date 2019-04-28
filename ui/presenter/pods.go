@@ -339,7 +339,6 @@ func (p *Pods) initKeybindings() {
 			p.ui.App.QueueEvent(tcell.NewEventKey(tcell.KeyEnter, rune(tcell.KeyEnter), tcell.ModNone))
 			return nil
 		case tcell.KeyF1:
-			p.ui.App.SetFocus(p.ui.PodData)
 			p.onFocused(p.ui.PodData)
 			if p.state.object != nil {
 				go func() {
@@ -348,7 +347,6 @@ func (p *Pods) initKeybindings() {
 					}
 					focused := p.details.show(p.state.object)
 					p.state.details = detailsObject
-					p.ui.App.SetFocus(focused)
 					p.setDetailsView(focused)
 				}()
 				return nil
@@ -362,7 +360,6 @@ func (p *Pods) initKeybindings() {
 					focused, err := p.events.show(p.state.object)
 					p.DisplayError(err)
 					p.state.details = detailsEvents
-					p.ui.App.SetFocus(focused)
 					p.setDetailsView(focused)
 				}()
 				return nil
@@ -379,7 +376,6 @@ func (p *Pods) initKeybindings() {
 					focused, err := p.log.show(ctx, p.state.object, "")
 					p.DisplayError(err)
 					p.state.details = detailsLog
-					p.ui.App.SetFocus(focused)
 					p.setDetailsView(focused)
 				}()
 				return nil
