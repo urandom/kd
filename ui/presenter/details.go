@@ -50,6 +50,10 @@ func (p *Details) show(object k8s.ObjectMetaGetter) tview.Primitive {
 }
 
 func (p *Details) printObjectSummary(w io.Writer, object k8s.ObjectMetaGetter) {
+	if object.GetObjectMeta().GetDeletionTimestamp() != nil {
+		fmt.Fprintf(w, "[skyblue::b]Delete request:[white::-] %s\n", duration.HumanDuration(time.Since(object.GetObjectMeta().GetDeletionTimestamp().Time)))
+	}
+
 	switch v := object.(type) {
 	case *cv1.Pod:
 		total := len(v.Status.ContainerStatuses)

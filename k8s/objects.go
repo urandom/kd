@@ -261,8 +261,6 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 
 	ch := make(chan PodWatcherEvent)
 	go func() {
-		ch <- PodWatcherEvent{Tree: tree}
-
 		for {
 			select {
 			case <-ctx.Done():
@@ -357,7 +355,34 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 		}
 	}()
 
-	return ch, nil
+	window := make(chan PodWatcherEvent)
+	go func() {
+		window <- PodWatcherEvent{Tree: tree}
+
+		var current PodWatcherEvent
+		trig := make(chan struct{})
+		canTrigger := true
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-trig:
+				window <- current
+				canTrigger = true
+			case ev, ok := <-ch:
+				if !ok {
+					return
+				}
+				current = ev
+				if canTrigger {
+					canTrigger = false
+					time.AfterFunc(500*time.Millisecond, func() { trig <- struct{}{} })
+				}
+			}
+		}
+	}()
+
+	return window, nil
 }
 
 func (c Client) PodTree(nsName string) (PodTree, error) {
