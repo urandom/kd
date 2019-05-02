@@ -30,7 +30,7 @@ func (m Manager) Start(
 	}
 
 	for _, e := range ext {
-		go func() {
+		go func(e string) {
 			rt := runtime{
 				Client:           client,
 				vm:               goja.New(),
@@ -40,7 +40,7 @@ func (m Manager) Start(
 			}
 			rt.SetData()
 			m.Run(ctx, e, rt)
-		}()
+		}(e)
 	}
 
 	return nil

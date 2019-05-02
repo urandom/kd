@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strconv"
 
 	"github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
@@ -168,7 +167,7 @@ func (p Picker) PickFrom(title string, items []string) <-chan string {
 		})
 
 	for i := range items {
-		list.AddItem(items[i], "", rune(strconv.Itoa(i)[0]), nil)
+		list.AddItem(items[i], "", rune(97+i), nil)
 	}
 
 	list.SetTitle(title)
