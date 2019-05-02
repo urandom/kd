@@ -37,7 +37,7 @@
         var config = kd.Client.CoreV1().ConfigMaps(this.namespace).Get(name, {})
 
         // Display show the text in the details pane
-        kd.Display(kd.ToYAML(config))
+        kd.Display("[greenyellow::b]Config map: " + name + "\n===========\n\n" + kd.ToYAML(config))
     }
 
     var configMap = new ConfigMap()
