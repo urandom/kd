@@ -37,7 +37,7 @@
         var config = kd.Client.CoreV1().Secrets(this.namespace).Get(name, {})
 
         // Display show the text in the details pane
-        kd.Display("[greenyellow::b]Secret: " + name + "\n===========\n\n" + kd.ToYAML(config))
+        kd.Display("[greenyellow::b]Secret: " + name + "\n=======\n\n" + kd.ToYAML(config))
     }
 
     var Secrets = new Secrets()
