@@ -2,7 +2,10 @@ module github.com/urandom/kd
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dlclark/regexp2 v1.1.6 // indirect
+	github.com/dop251/goja v0.0.0-20190429205339-8d6ee3d16611
 	github.com/gdamore/tcell v1.1.1
+	github.com/go-sourcemap/sourcemap v2.1.2+incompatible // indirect
 	github.com/gogo/protobuf v1.2.1 // indirect
 	github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c // indirect
 	github.com/google/gofuzz v0.0.0-20170612174753-24818f796faf // indirect

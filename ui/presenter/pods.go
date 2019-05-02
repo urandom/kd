@@ -29,28 +29,41 @@ const (
 	detailsLog
 )
 
+type ObjectSelectAction func(k8s.ObjectMetaGetter) (ObjectSelectedData, error)
+
+type ObjectSelectedCallback func() error
+
+type ObjectSelectedData struct {
+	Label    string
+	Callback ObjectSelectedCallback
+}
+
 type Pods struct {
 	Error
+	picker  Picker
 	details *Details
 	events  *Events
 	log     *Log
 	editor  *Editor
 
-	client k8s.Client
-	state  struct {
+	client     k8s.Client
+	extManager ExtensionManager
+	state      struct {
 		activeComponent podsComponent
 		namespace       string
 		object          k8s.ObjectMetaGetter
 		details         detailsView
 		fullscreen      bool
 	}
-	cancelWatchFn context.CancelFunc
-	cancelNSFn    context.CancelFunc
+	cancelWatchFn   context.CancelFunc
+	cancelNSFn      context.CancelFunc
+	selectedActions []ObjectSelectAction
 }
 
-func NewPods(ui *ui.UI, client k8s.Client) *Pods {
+func NewPods(ui *ui.UI, client k8s.Client, extManager ExtensionManager) *Pods {
 	p := &Pods{
 		Error:   NewError(ui),
+		picker:  NewPicker(ui),
 		details: NewDetails(ui, client),
 		events:  NewEvents(ui, client),
 		log:     NewLog(ui, client),
@@ -58,6 +71,25 @@ func NewPods(ui *ui.UI, client k8s.Client) *Pods {
 		client:  client,
 	}
 	p.state.namespace = "___"
+
+	objSelectChan := make(chan ObjectSelectAction)
+	if err := extManager.Start(
+		context.Background(), objSelectChan, p.picker, p.client,
+		func(text string) error {
+			p.ui.PodData.SetText(text).SetRegions(true).SetDynamicColors(true)
+			p.setDetailsView(p.ui.PodData)
+			return nil
+		},
+	); err != nil {
+		log.Println("Error starting extension manager:", err)
+	}
+
+	go func() {
+		for {
+			action := <-objSelectChan
+			p.selectedActions = append(p.selectedActions, action)
+		}
+	}()
 
 	return p
 }
@@ -413,6 +445,31 @@ func (p *Pods) initKeybindings() {
 				}()
 				return nil
 			}
+		case tcell.KeyF9:
+			if p.state.object != nil && len(p.selectedActions) > 0 {
+				go func() {
+					labels := make([]string, 0, len(p.selectedActions))
+					cbMap := map[string]ObjectSelectedCallback{}
+					for _, action := range p.selectedActions {
+						data, err := action(p.state.object)
+						if p.DisplayError(err) {
+							return
+						}
+						if data.Label == "" || data.Callback == nil {
+							continue
+						}
+						labels = append(labels, data.Label)
+						cbMap[data.Label] = data.Callback
+					}
+					if len(labels) > 0 {
+						choice := <-p.picker.PickFrom("More", labels)
+						if cb := cbMap[choice]; cb != nil {
+							p.DisplayError(cb())
+						}
+					}
+				}()
+				return nil
+			}
 		case tcell.KeyF10:
 			p.ui.App.Stop()
 			return nil
@@ -457,11 +514,14 @@ func (p *Pods) buttonsForPodsTree() {
 		}
 	}
 	p.ui.ActionBar.AddAction(5, "Refresh")
-	if _, ok := p.state.object.(k8s.Controller); !ok {
+	if _, ok := p.state.object.(k8s.Controller); p.state.object != nil && !ok {
 		p.ui.ActionBar.AddAction(6, "Delete")
 	}
 	if _, ok := p.state.object.(*k8s.Deployment); ok {
 		p.ui.ActionBar.AddAction(7, "Scale")
+	}
+	if p.state.object != nil && len(p.selectedActions) > 0 {
+		p.ui.ActionBar.AddAction(9, "More")
 	}
 	p.ui.ActionBar.AddAction(10, "Quit")
 }
@@ -484,6 +544,9 @@ func (p *Pods) buttonsForPodsDetails() {
 		}
 		if _, ok := p.state.object.(*k8s.Deployment); ok {
 			p.ui.ActionBar.AddAction(7, "Scale")
+		}
+		if len(p.selectedActions) > 0 {
+			p.ui.ActionBar.AddAction(9, "More")
 		}
 	}
 	p.ui.ActionBar.AddAction(10, "Quit")

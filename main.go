@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime/pprof"
 
+	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
 	"github.com/urandom/kd/ui/presenter"
@@ -16,8 +17,9 @@ import (
 )
 
 var (
-	configF     = flag.String("kubeconfig", "", "Path to the kubeconfig file")
-	cpuProfileF = flag.String("cpuprofile", "", "write cpu profile to file")
+	configF        = flag.String("kubeconfig", "", "path to kubeconfig file")
+	cpuProfileF    = flag.String("cpuprofile", "", "write cpu profile to file")
+	extensionPathF = flag.String("extensions", "", "path to extensions directory")
 )
 
 func main() {
@@ -36,7 +38,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	p := presenter.NewMain(ui.New(), func() (k8s.Client, error) { return k8s.New(*configF) })
+	loader, err := ext.NewLoader(*extensionPathF)
+	if err != nil {
+		log.Fatal(err)
+	}
+	manager := ext.NewManager(loader)
+	p := presenter.NewMain(ui.New(), manager, func() (k8s.Client, error) { return k8s.New(*configF) })
 
 	if err := p.Run(); err != nil {
 		fmt.Fprint(os.Stderr, err)

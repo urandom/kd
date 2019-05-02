@@ -1,6 +1,7 @@
 package presenter
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strconv"
@@ -21,6 +22,16 @@ type UserRetryableError struct {
 }
 
 type ClientFactory func() (k8s.Client, error)
+
+type ExtensionManager interface {
+	Start(
+		context.Context,
+		chan<- ObjectSelectAction,
+		Picker,
+		k8s.Client,
+		func(string) error,
+	) error
+}
 
 type Modal struct {
 	ui *ui.UI
@@ -47,8 +58,8 @@ func (p *Modal) display(prim tview.Primitive) {
 func (p *Modal) Close() {
 	p.ui.App.QueueUpdateDraw(func() {
 		if p.isModalVisible {
-			p.isModalVisible = false
 			p.ui.Pages.RemovePage(ui.PageModal)
+			p.isModalVisible = false
 			p.ui.App.SetFocus(p.focused)
 		}
 	})
@@ -185,22 +196,24 @@ type Main struct {
 	Error
 
 	clientFactory ClientFactory
+	extManager    ExtensionManager
 
 	client k8s.Client
 	Pods   *Pods
 }
 
-func NewMain(ui *ui.UI, clientFactory ClientFactory) *Main {
+func NewMain(ui *ui.UI, extManager ExtensionManager, clientFactory ClientFactory) *Main {
 	return &Main{
 		Error:         NewError(ui),
 		clientFactory: clientFactory,
+		extManager:    extManager,
 	}
 }
 
 func (p *Main) Run() error {
 	go func() {
 		if !p.DisplayError(p.initClient()) {
-			p.Pods = NewPods(p.ui, p.client)
+			p.Pods = NewPods(p.ui, p.client, p.extManager)
 			p.Pods.initKeybindings()
 			p.DisplayError(p.Pods.populateNamespaces())
 		}
