@@ -11,6 +11,7 @@ import (
 	bv1b1 "k8s.io/api/batch/v1beta1"
 	cv1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 
 	"golang.org/x/sync/errgroup"
@@ -24,6 +25,7 @@ type PodManager interface {
 
 type ObjectMetaGetter interface {
 	GetObjectMeta() meta.Object
+	GetObjectKind() schema.ObjectKind
 }
 
 type Selector map[string]string
@@ -269,13 +271,11 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 				return
 			case ev := <-pw.ResultChan():
 				if o, ok := ev.Object.(*cv1.Pod); ok {
-					fixPod(o)
 					modifyPodInTree(&tree, o, ev.Type == watch.Deleted)
 					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
 				}
 			case ev := <-stsw.ResultChan():
 				if o, ok := ev.Object.(*av1.StatefulSet); ok {
-					fixStatefulSet(o)
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
@@ -288,7 +288,6 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 				}
 			case ev := <-dw.ResultChan():
 				if o, ok := ev.Object.(*av1.Deployment); ok {
-					fixDeployment(o)
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
@@ -301,7 +300,6 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 				}
 			case ev := <-dsw.ResultChan():
 				if o, ok := ev.Object.(*av1.DaemonSet); ok {
-					fixDaemonSet(o)
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
@@ -314,7 +312,6 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 				}
 			case ev := <-jw.ResultChan():
 				if o, ok := ev.Object.(*bv1.Job); ok {
-					fixJob(o)
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
@@ -327,7 +324,6 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 				}
 			case ev := <-cjw.ResultChan():
 				if o, ok := ev.Object.(*bv1b1.CronJob); ok {
-					fixCronJob(o)
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
@@ -340,7 +336,6 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 				}
 			case ev := <-sw.ResultChan():
 				if o, ok := ev.Object.(*cv1.Service); ok {
-					fixService(o)
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
@@ -408,18 +403,12 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		if pods, err = core.Pods(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of pods for ns %s: %w", nsName, err)
 		}
-		for i := range pods.Items {
-			fixPod(&pods.Items[i])
-		}
 		return nil
 	})
 
 	g.Go(func() (err error) {
 		if statefulsets, err = apps.StatefulSets(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of stateful sets for ns %s: %w", nsName, err)
-		}
-		for i := range statefulsets.Items {
-			fixStatefulSet(&statefulsets.Items[i])
 		}
 		return err
 	})
@@ -428,18 +417,12 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		if deployments, err = apps.Deployments(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of deployments for ns %s: %w", nsName, err)
 		}
-		for i := range deployments.Items {
-			fixDeployment(&deployments.Items[i])
-		}
 		return nil
 	})
 
 	g.Go(func() (err error) {
 		if daemonsets, err = apps.DaemonSets(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of daemon sets for ns %s: %w", nsName, err)
-		}
-		for i := range daemonsets.Items {
-			fixDaemonSet(&daemonsets.Items[i])
 		}
 		return nil
 	})
@@ -448,9 +431,6 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		if jobs, err = batch.Jobs(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of jobs for ns %s: %w", nsName, err)
 		}
-		for i := range jobs.Items {
-			fixJob(&jobs.Items[i])
-		}
 		return nil
 	})
 
@@ -458,19 +438,12 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		if cronjobs, err = batchBeta.CronJobs(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of cronjobs for ns %s: %w", nsName, err)
 		}
-		for i := range cronjobs.Items {
-
-			fixCronJob(&cronjobs.Items[i])
-		}
 		return nil
 	})
 
 	g.Go(func() (err error) {
 		if services, err = core.Services(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of services for ns %s: %w", nsName, err)
-		}
-		for i := range services.Items {
-			fixService(&services.Items[i])
 		}
 		return nil
 	})
@@ -630,6 +603,52 @@ func (c Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) err
 	return nil
 }
 
+func (c Client) FixObject(object *ObjectMetaGetter) {
+	if (*object).GetObjectKind().GroupVersionKind().Kind == "" {
+		if v, ok := (*object).(Controller); ok {
+			*object = v.Controller()
+		}
+		switch v := (*object).(type) {
+		case *cv1.Pod:
+			v.TypeMeta.Kind = "Pod"
+			v.TypeMeta.APIVersion = "v1"
+			*object = v
+		case *av1.StatefulSet:
+			v.TypeMeta.Kind = "StatefulSet"
+			v.TypeMeta.APIVersion = "apps/v1"
+			*object = v
+		case *av1.Deployment:
+			v.TypeMeta.Kind = "Deployment"
+			v.TypeMeta.APIVersion = "extensions/v1beta1"
+			*object = v
+		case *av1.DaemonSet:
+			v.TypeMeta.Kind = "DaemonSet"
+			v.TypeMeta.APIVersion = "extensions/v1beta1"
+			*object = v
+		case *bv1.Job:
+			v.TypeMeta.Kind = "Job"
+			v.TypeMeta.APIVersion = "batch/v1"
+			*object = v
+		case *bv1b1.CronJob:
+			v.TypeMeta.Kind = "CronJob"
+			v.TypeMeta.APIVersion = "batch/v1beta1"
+			*object = v
+		case *cv1.Service:
+			v.TypeMeta.Kind = "Service"
+			v.TypeMeta.APIVersion = "v1"
+			*object = v
+		case *cv1.ConfigMap:
+			v.TypeMeta.Kind = "ConfigMap"
+			v.TypeMeta.APIVersion = "v1"
+			*object = v
+		case *cv1.Secret:
+			v.TypeMeta.Kind = "Secret"
+			v.TypeMeta.APIVersion = "v1"
+			*object = v
+		}
+	}
+}
+
 func matchPods(pods []*cv1.Pod, selector map[string]string) []*cv1.Pod {
 	if len(selector) == 0 {
 		return nil
@@ -654,55 +673,6 @@ func matchPods(pods []*cv1.Pod, selector map[string]string) []*cv1.Pod {
 	}
 
 	return matched
-}
-
-func fixPod(pod *cv1.Pod) {
-	if pod.TypeMeta.Kind == "" {
-		pod.TypeMeta.Kind = "Pod"
-		pod.TypeMeta.APIVersion = "v1"
-	}
-}
-
-func fixStatefulSet(statefulset *av1.StatefulSet) {
-	if statefulset.TypeMeta.Kind == "" {
-		statefulset.TypeMeta.Kind = "StatefulSet"
-		statefulset.TypeMeta.APIVersion = "apps/v1"
-	}
-}
-
-func fixDeployment(deployment *av1.Deployment) {
-	if deployment.TypeMeta.Kind == "" {
-		deployment.TypeMeta.Kind = "Deployment"
-		deployment.TypeMeta.APIVersion = "extensions/v1beta1"
-	}
-}
-
-func fixDaemonSet(daemonset *av1.DaemonSet) {
-	if daemonset.TypeMeta.Kind == "" {
-		daemonset.TypeMeta.Kind = "DaemonSet"
-		daemonset.TypeMeta.APIVersion = "extensions/v1beta1"
-	}
-}
-
-func fixJob(job *bv1.Job) {
-	if job.TypeMeta.Kind == "" {
-		job.TypeMeta.Kind = "Job"
-		job.TypeMeta.APIVersion = "batch/v1"
-	}
-}
-
-func fixCronJob(cronjob *bv1b1.CronJob) {
-	if cronjob.TypeMeta.Kind == "" {
-		cronjob.TypeMeta.Kind = "CronJob"
-		cronjob.TypeMeta.APIVersion = "batch/v1beta1"
-	}
-}
-
-func fixService(service *cv1.Service) {
-	if service.TypeMeta.Kind == "" {
-		service.TypeMeta.Kind = "Service"
-		service.TypeMeta.APIVersion = "v1"
-	}
 }
 
 func modifyPodInTree(tree *PodTree, pod *cv1.Pod, delete bool) {

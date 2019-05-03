@@ -28,6 +28,7 @@ const (
 	detailsObject detailsView = iota
 	detailsEvents
 	detailsLog
+	detailsText
 )
 
 type Pods struct {
@@ -71,6 +72,7 @@ func NewPods(ui *ui.UI, client k8s.Client, extManager ext.Manager) *Pods {
 		ext.ObjectSelectedActionChan(objSelectChan),
 		ext.DisplayText(
 			func(text string) error {
+				p.state.details = detailsText
 				p.ui.PodData.SetText(text).SetRegions(true).SetDynamicColors(true)
 				p.setDetailsView(p.ui.PodData)
 				return nil
@@ -318,6 +320,8 @@ func (p *Pods) setDetailsView(object tview.Primitive) {
 	case detailsEvents:
 	case detailsLog:
 		p.ui.PodData.SetTitle("Logs")
+	case detailsText:
+		p.ui.PodData.SetTitle("Text")
 	}
 }
 
@@ -333,7 +337,7 @@ func (p *Pods) initKeybindings() {
 			switch p.ui.App.GetFocus() {
 			case p.ui.PodsTree:
 				switch p.state.details {
-				case detailsObject, detailsLog:
+				case detailsObject, detailsLog, detailsText:
 					toFocus = p.ui.PodData
 				case detailsEvents:
 					toFocus = p.ui.PodEvents
@@ -427,6 +431,11 @@ func (p *Pods) initKeybindings() {
 				p.ui.PodsDetails.SetFullScreen(p.state.fullscreen)
 				return nil
 			}
+		case tcell.KeyEsc:
+			if p.state.details == detailsText {
+				p.state.details = detailsObject
+				p.showObject(p.state.object)
+			}
 		}
 		return event
 	})
@@ -503,6 +512,8 @@ func (p *Pods) showObject(obj k8s.ObjectMetaGetter) {
 	if p.cancelWatchFn != nil {
 		p.cancelWatchFn()
 	}
+
+	p.client.FixObject(&obj)
 	switch p.state.details {
 	case detailsObject:
 		go func() {

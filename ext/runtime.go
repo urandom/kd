@@ -80,6 +80,8 @@ func (rt runtime) Display(v interface{}) error {
 	switch vv := v.(type) {
 	case string:
 		return rt.options.displayTextFunc(vv)
+	case []byte:
+		return rt.options.displayTextFunc(string(vv))
 	case k8s.ObjectMetaGetter:
 		return rt.options.displayObjectFunc(vv)
 	}
