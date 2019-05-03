@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
 	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
@@ -66,8 +65,7 @@ func NewPods(ui *ui.UI, client k8s.Client, extManager ext.Manager) *Pods {
 	p.state.namespace = "___"
 
 	objSelectChan := make(chan ext.ObjectSelectedAction)
-	ctx, _ := context.WithTimeout(context.Background(), time.Minute)
-	if err := extManager.Start(ctx,
+	if err := extManager.Start(
 		ext.Client(p.client),
 		ext.PickFrom(p.picker.PickFrom),
 		ext.ObjectSelectedActionChan(objSelectChan),

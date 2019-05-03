@@ -1,8 +1,6 @@
 package ext
 
 import (
-	"context"
-
 	"github.com/dop251/goja"
 	"golang.org/x/xerrors"
 )
@@ -16,7 +14,6 @@ func NewManager(loader Loader) Manager {
 }
 
 func (m Manager) Start(
-	ctx context.Context,
 	opts ...Option,
 ) error {
 	ext, err := m.loader.Extensions()
@@ -34,17 +31,13 @@ func (m Manager) Start(
 				vm:      goja.New(),
 			}
 			rt.SetData()
-			m.Run(ctx, e, rt)
+			m.Run(e, rt)
 		}(e)
 	}
 
 	return nil
 }
 
-func (m Manager) Run(ctx context.Context, ext string, rt runtime) {
-	go func() {
-		<-ctx.Done()
-		rt.vm.Interrupt(ctx.Err())
-	}()
+func (m Manager) Run(ext string, rt runtime) {
 	rt.vm.RunString(ext)
 }
