@@ -295,30 +295,7 @@ func (p *Pods) populatePods(ns string) error {
 
 		p.state.object = ref.(k8s.ObjectMetaGetter)
 		p.onFocused(p.ui.PodsTree)
-		if p.cancelWatchFn != nil {
-			p.cancelWatchFn()
-		}
-		switch p.state.details {
-		case detailsObject:
-			go func() {
-				focused := p.details.show(p.state.object)
-				p.setDetailsView(focused)
-			}()
-		case detailsEvents:
-			go func() {
-				focused, err := p.events.show(p.state.object)
-				p.DisplayError(err)
-				p.setDetailsView(focused)
-			}()
-		case detailsLog:
-			go func() {
-				ctx, cancel := context.WithCancel(context.Background())
-				p.cancelWatchFn = cancel
-				focused, err := p.log.show(ctx, p.state.object, "")
-				p.DisplayError(err)
-				p.setDetailsView(focused)
-			}()
-		}
+		p.showObject(p.state.object)
 	})
 
 	return nil
@@ -369,44 +346,26 @@ func (p *Pods) initKeybindings() {
 			p.ui.App.QueueEvent(tcell.NewEventKey(tcell.KeyEnter, rune(tcell.KeyEnter), tcell.ModNone))
 			return nil
 		case tcell.KeyF1:
-			p.onFocused(p.ui.PodData)
 			if p.state.object != nil {
 				go func() {
-					if p.cancelWatchFn != nil {
-						p.cancelWatchFn()
-					}
-					focused := p.details.show(p.state.object)
 					p.state.details = detailsObject
-					p.setDetailsView(focused)
+					p.showObject(p.state.object)
 				}()
 				return nil
 			}
 		case tcell.KeyF2:
 			if p.state.object != nil {
 				go func() {
-					if p.cancelWatchFn != nil {
-						p.cancelWatchFn()
-					}
-					focused, err := p.events.show(p.state.object)
-					p.DisplayError(err)
 					p.state.details = detailsEvents
-					p.setDetailsView(focused)
+					p.showObject(p.state.object)
 				}()
 				return nil
 			}
 		case tcell.KeyF3:
 			if p.state.object != nil {
 				go func() {
-					if p.cancelWatchFn != nil {
-						p.cancelWatchFn()
-					}
-					ctx, cancel := context.WithCancel(context.Background())
-					p.cancelWatchFn = cancel
-
-					focused, err := p.log.show(ctx, p.state.object, "")
-					p.DisplayError(err)
 					p.state.details = detailsLog
-					p.setDetailsView(focused)
+					p.showObject(p.state.object)
 				}()
 				return nil
 			}
@@ -562,6 +521,33 @@ func (p *Pods) refreshFocused() {
 		case detailsEvents:
 			p.ui.App.QueueEvent(tcell.NewEventKey(tcell.KeyF2, rune(tcell.KeyF2), tcell.ModNone))
 		}
+	}
+}
+
+func (p *Pods) showObject(obj k8s.ObjectMetaGetter) {
+	if p.cancelWatchFn != nil {
+		p.cancelWatchFn()
+	}
+	switch p.state.details {
+	case detailsObject:
+		go func() {
+			focused := p.details.show(obj)
+			p.setDetailsView(focused)
+		}()
+	case detailsEvents:
+		go func() {
+			focused, err := p.events.show(obj)
+			p.DisplayError(err)
+			p.setDetailsView(focused)
+		}()
+	case detailsLog:
+		go func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			p.cancelWatchFn = cancel
+			focused, err := p.log.show(ctx, obj, "")
+			p.DisplayError(err)
+			p.setDetailsView(focused)
+		}()
 	}
 }
 
