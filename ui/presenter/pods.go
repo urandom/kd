@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"sort"
 	"strings"
 	"time"
 
@@ -48,9 +47,10 @@ type Pods struct {
 		details         detailsView
 		fullscreen      bool
 	}
-	cancelWatchFn   context.CancelFunc
-	cancelNSFn      context.CancelFunc
-	selectedActions []ext.ObjectSelectedAction
+	cancelWatchFn       context.CancelFunc
+	cancelNSFn          context.CancelFunc
+	selectedActions     []ext.ObjectSelectedAction
+	selectedActionsData ext.ObjectSelectedDataSlice
 }
 
 func NewPods(ui *ui.UI, client k8s.Client, extManager ext.Manager) *Pods {
@@ -75,6 +75,13 @@ func NewPods(ui *ui.UI, client k8s.Client, extManager ext.Manager) *Pods {
 			func(text string) error {
 				p.ui.PodData.SetText(text).SetRegions(true).SetDynamicColors(true)
 				p.setDetailsView(p.ui.PodData)
+				return nil
+			},
+		),
+		ext.DisplayObject(
+			func(obj k8s.ObjectMetaGetter) error {
+				p.state.object = obj
+				p.showObject(obj)
 				return nil
 			},
 		),
@@ -403,27 +410,12 @@ func (p *Pods) initKeybindings() {
 				return nil
 			}
 		case tcell.KeyF9:
-			if p.state.object != nil && len(p.selectedActions) > 0 {
+			if p.state.object != nil && len(p.selectedActionsData) > 0 {
 				go func() {
-					labels := make([]string, 0, len(p.selectedActions))
-					cbMap := map[string]ext.ObjectSelectedCallback{}
-					for _, action := range p.selectedActions {
-						data, err := action(p.state.object)
-						if p.DisplayError(err) {
-							return
-						}
-						if data.Label == "" || data.Callback == nil {
-							continue
-						}
-						labels = append(labels, data.Label)
-						cbMap[data.Label] = data.Callback
-					}
-					if len(labels) > 0 {
-						sort.Strings(labels)
-						choice := <-p.picker.PickFrom("More", labels)
-						if cb := cbMap[choice]; cb != nil {
-							p.DisplayError(cb())
-						}
+					choice := <-p.picker.PickFrom("More", p.selectedActionsData.Labels())
+					selected := p.selectedActionsData.FindForLabel(choice)
+					if selected.Valid() {
+						p.DisplayError(selected.Callback())
 					}
 				}()
 				return nil
@@ -446,19 +438,14 @@ func (p *Pods) onFocused(primitive tview.Primitive) {
 	p.state.activeComponent = primitiveToComponent(primitive)
 
 	p.resetButtons()
-	switch p.state.activeComponent {
-	case podsTree:
-		p.buttonsForPodsTree()
-	case podsDetails:
-		p.buttonsForPodsDetails()
-	}
+	p.setupButtons()
 }
 
 func (p Pods) resetButtons() {
 	p.ui.ActionBar.Clear()
 }
 
-func (p *Pods) buttonsForPodsTree() {
+func (p *Pods) setupButtons() {
 	if p.state.object != nil {
 		p.ui.ActionBar.AddAction(1, "Details")
 		p.ui.ActionBar.AddAction(2, "Events")
@@ -471,7 +458,9 @@ func (p *Pods) buttonsForPodsTree() {
 			p.ui.ActionBar.AddAction(4, "View")
 		}
 	}
-	p.ui.ActionBar.AddAction(5, "Refresh")
+	if p.state.activeComponent == podsTree || p.state.object != nil {
+		p.ui.ActionBar.AddAction(5, "Refresh")
+	}
 	if _, ok := p.state.object.(k8s.Controller); p.state.object != nil && !ok {
 		p.ui.ActionBar.AddAction(6, "Delete")
 	}
@@ -479,31 +468,19 @@ func (p *Pods) buttonsForPodsTree() {
 		p.ui.ActionBar.AddAction(7, "Scale")
 	}
 	if p.state.object != nil && len(p.selectedActions) > 0 {
-		p.ui.ActionBar.AddAction(9, "More")
-	}
-	p.ui.ActionBar.AddAction(10, "Quit")
-}
-
-func (p *Pods) buttonsForPodsDetails() {
-	if p.state.object != nil {
-		p.ui.ActionBar.AddAction(1, "Details")
-		p.ui.ActionBar.AddAction(2, "Events")
-		p.ui.ActionBar.AddAction(3, "Logs")
-		switch p.state.details {
-		case detailsObject:
-			p.ui.ActionBar.AddAction(4, "Edit")
-		case detailsEvents:
-		case detailsLog:
-			p.ui.ActionBar.AddAction(4, "View")
+		p.selectedActionsData = make(ext.ObjectSelectedDataSlice, 0, len(p.selectedActions))
+		for _, action := range p.selectedActions {
+			data, err := action(p.state.object)
+			if p.DisplayError(err) {
+				return
+			}
+			if !data.Valid() {
+				continue
+			}
+			p.selectedActionsData = append(p.selectedActionsData, data)
 		}
-		p.ui.ActionBar.AddAction(5, "Refresh")
-		if _, ok := p.state.object.(k8s.Controller); !ok {
-			p.ui.ActionBar.AddAction(6, "Delete")
-		}
-		if _, ok := p.state.object.(*k8s.Deployment); ok {
-			p.ui.ActionBar.AddAction(7, "Scale")
-		}
-		if len(p.selectedActions) > 0 {
+		if len(p.selectedActionsData) > 0 {
+			p.selectedActionsData.SortByLabel()
 			p.ui.ActionBar.AddAction(9, "More")
 		}
 	}

@@ -29,9 +29,11 @@ func (rt runtime) RegisterActionOnObjectSelected(
 		if m, ok := val.Export().(map[string]interface{}); ok {
 			if rawCB, ok := m["cb"].(func(goja.FunctionCall) goja.Value); ok {
 				data.Callback = func() (err error) {
-					if r := recover(); r != nil {
-						err = xerrors.Errorf("js error on object selected callback: %v", r)
-					}
+					defer func() {
+						if r := recover(); r != nil {
+							err = xerrors.Errorf("js error on object selected callback: %v", r)
+						}
+					}()
 
 					rawCB(goja.FunctionCall{})
 
@@ -74,6 +76,12 @@ func (rt runtime) ToYAML(v interface{}) (string, error) {
 	return string(b), nil
 }
 
-func (rt runtime) Display(text string) error {
-	return rt.options.displayTextFunc(text)
+func (rt runtime) Display(v interface{}) error {
+	switch vv := v.(type) {
+	case string:
+		return rt.options.displayTextFunc(vv)
+	case k8s.ObjectMetaGetter:
+		return rt.options.displayObjectFunc(vv)
+	}
+	return nil
 }
