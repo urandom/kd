@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
+	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
 	cv1 "k8s.io/api/core/v1"
@@ -29,15 +32,6 @@ const (
 	detailsLog
 )
 
-type ObjectSelectAction func(k8s.ObjectMetaGetter) (ObjectSelectedData, error)
-
-type ObjectSelectedCallback func() error
-
-type ObjectSelectedData struct {
-	Label    string
-	Callback ObjectSelectedCallback
-}
-
 type Pods struct {
 	Error
 	picker  Picker
@@ -46,9 +40,8 @@ type Pods struct {
 	log     *Log
 	editor  *Editor
 
-	client     k8s.Client
-	extManager ExtensionManager
-	state      struct {
+	client k8s.Client
+	state  struct {
 		activeComponent podsComponent
 		namespace       string
 		object          k8s.ObjectMetaGetter
@@ -57,10 +50,10 @@ type Pods struct {
 	}
 	cancelWatchFn   context.CancelFunc
 	cancelNSFn      context.CancelFunc
-	selectedActions []ObjectSelectAction
+	selectedActions []ext.ObjectSelectedAction
 }
 
-func NewPods(ui *ui.UI, client k8s.Client, extManager ExtensionManager) *Pods {
+func NewPods(ui *ui.UI, client k8s.Client, extManager ext.Manager) *Pods {
 	p := &Pods{
 		Error:   NewError(ui),
 		picker:  NewPicker(ui),
@@ -72,14 +65,19 @@ func NewPods(ui *ui.UI, client k8s.Client, extManager ExtensionManager) *Pods {
 	}
 	p.state.namespace = "___"
 
-	objSelectChan := make(chan ObjectSelectAction)
-	if err := extManager.Start(
-		context.Background(), objSelectChan, p.picker, p.client,
-		func(text string) error {
-			p.ui.PodData.SetText(text).SetRegions(true).SetDynamicColors(true)
-			p.setDetailsView(p.ui.PodData)
-			return nil
-		},
+	objSelectChan := make(chan ext.ObjectSelectedAction)
+	ctx, _ := context.WithTimeout(context.Background(), time.Minute)
+	if err := extManager.Start(ctx,
+		ext.Client(p.client),
+		ext.PickFrom(p.picker.PickFrom),
+		ext.ObjectSelectedActionChan(objSelectChan),
+		ext.DisplayText(
+			func(text string) error {
+				p.ui.PodData.SetText(text).SetRegions(true).SetDynamicColors(true)
+				p.setDetailsView(p.ui.PodData)
+				return nil
+			},
+		),
 	); err != nil {
 		log.Println("Error starting extension manager:", err)
 	}
@@ -449,7 +447,7 @@ func (p *Pods) initKeybindings() {
 			if p.state.object != nil && len(p.selectedActions) > 0 {
 				go func() {
 					labels := make([]string, 0, len(p.selectedActions))
-					cbMap := map[string]ObjectSelectedCallback{}
+					cbMap := map[string]ext.ObjectSelectedCallback{}
 					for _, action := range p.selectedActions {
 						data, err := action(p.state.object)
 						if p.DisplayError(err) {
@@ -462,6 +460,7 @@ func (p *Pods) initKeybindings() {
 						cbMap[data.Label] = data.Callback
 					}
 					if len(labels) > 0 {
+						sort.Strings(labels)
 						choice := <-p.picker.PickFrom("More", labels)
 						if cb := cbMap[choice]; cb != nil {
 							p.DisplayError(cb())

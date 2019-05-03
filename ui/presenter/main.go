@@ -1,11 +1,11 @@
 package presenter
 
 import (
-	"context"
 	"fmt"
 	"log"
 
 	"github.com/rivo/tview"
+	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
 	"golang.org/x/xerrors"
@@ -21,16 +21,6 @@ type UserRetryableError struct {
 }
 
 type ClientFactory func() (k8s.Client, error)
-
-type ExtensionManager interface {
-	Start(
-		context.Context,
-		chan<- ObjectSelectAction,
-		Picker,
-		k8s.Client,
-		func(string) error,
-	) error
-}
 
 type Modal struct {
 	ui *ui.UI
@@ -195,13 +185,13 @@ type Main struct {
 	Error
 
 	clientFactory ClientFactory
-	extManager    ExtensionManager
+	extManager    ext.Manager
 
 	client k8s.Client
 	Pods   *Pods
 }
 
-func NewMain(ui *ui.UI, extManager ExtensionManager, clientFactory ClientFactory) *Main {
+func NewMain(ui *ui.UI, extManager ext.Manager, clientFactory ClientFactory) *Main {
 	return &Main{
 		Error:         NewError(ui),
 		clientFactory: clientFactory,

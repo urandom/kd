@@ -5,24 +5,19 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/urandom/kd/k8s"
-	"github.com/urandom/kd/ui/presenter"
 	"golang.org/x/xerrors"
 	"sigs.k8s.io/yaml"
 )
 
 type runtime struct {
-	Client k8s.Client
-
-	vm               *goja.Runtime
-	objectSelectChan chan<- presenter.ObjectSelectAction
-	picker           presenter.Picker
-	displayFunc      func(string) error
+	options options
+	vm      *goja.Runtime
 }
 
 func (rt runtime) RegisterActionOnObjectSelected(
 	cb func(goja.FunctionCall) goja.Value,
 ) {
-	normalized := func(obj k8s.ObjectMetaGetter) (data presenter.ObjectSelectedData, err error) {
+	normalized := func(obj k8s.ObjectMetaGetter) (data ObjectSelectedData, err error) {
 		defer func() {
 			if r := recover(); r != nil {
 				err = xerrors.Errorf("js error on object selected registration: %v", r)
@@ -30,7 +25,7 @@ func (rt runtime) RegisterActionOnObjectSelected(
 		}()
 
 		val := cb(goja.FunctionCall{Arguments: []goja.Value{rt.vm.ToValue(obj)}})
-		data = presenter.ObjectSelectedData{}
+		data = ObjectSelectedData{}
 		if m, ok := val.Export().(map[string]interface{}); ok {
 			if rawCB, ok := m["cb"].(func(goja.FunctionCall) goja.Value); ok {
 				data.Callback = func() (err error) {
@@ -53,11 +48,15 @@ func (rt runtime) RegisterActionOnObjectSelected(
 		return data, err
 	}
 
-	rt.objectSelectChan <- normalized
+	rt.options.objectSelectedChan <- normalized
+}
+
+func (rt runtime) Client() k8s.Client {
+	return rt.options.client
 }
 
 func (rt runtime) Choose(title string, choices []string) string {
-	return <-rt.picker.PickFrom(title, choices)
+	return <-rt.options.pickFromFunc(title, choices)
 }
 
 func (rt runtime) SetData() {
@@ -76,5 +75,5 @@ func (rt runtime) ToYAML(v interface{}) (string, error) {
 }
 
 func (rt runtime) Display(text string) error {
-	return rt.displayFunc(text)
+	return rt.options.displayTextFunc(text)
 }

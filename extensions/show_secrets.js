@@ -34,7 +34,7 @@
         }
 
         // Client holds the k8s.Client object
-        var config = kd.Client.CoreV1().Secrets(this.namespace).Get(name, {})
+        var config = kd.Client().CoreV1().Secrets(this.namespace).Get(name, {})
 
         // Display show the text in the details pane
         kd.Display("[greenyellow::b]Secret: " + name + "\n=======\n\n" + kd.ToYAML(config))

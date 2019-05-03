@@ -4,8 +4,6 @@ import (
 	"context"
 
 	"github.com/dop251/goja"
-	"github.com/urandom/kd/k8s"
-	"github.com/urandom/kd/ui/presenter"
 	"golang.org/x/xerrors"
 )
 
@@ -19,24 +17,21 @@ func NewManager(loader Loader) Manager {
 
 func (m Manager) Start(
 	ctx context.Context,
-	objectSelectChan chan<- presenter.ObjectSelectAction,
-	picker presenter.Picker,
-	client k8s.Client,
-	displayFunc func(string) error,
+	opts ...Option,
 ) error {
 	ext, err := m.loader.Extensions()
 	if err != nil {
 		return xerrors.Errorf("loading extensions: %v", err)
 	}
 
+	o := options{}
+	o.apply(opts...)
+
 	for _, e := range ext {
 		go func(e string) {
 			rt := runtime{
-				Client:           client,
-				vm:               goja.New(),
-				objectSelectChan: objectSelectChan,
-				picker:           picker,
-				displayFunc:      displayFunc,
+				options: o,
+				vm:      goja.New(),
 			}
 			rt.SetData()
 			m.Run(ctx, e, rt)
