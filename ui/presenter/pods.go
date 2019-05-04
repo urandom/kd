@@ -300,20 +300,22 @@ func (p *Pods) populatePods(ns string) error {
 }
 
 func (p *Pods) setDetailsView(object tview.Primitive) {
-	p.ui.PodsDetails.RemoveItem(p.ui.PodData)
-	p.ui.PodsDetails.RemoveItem(p.ui.PodEvents)
-	p.ui.PodsDetails.AddItem(object, 0, 1, false)
-	p.onFocused(object)
+	p.ui.App.QueueUpdateDraw(func() {
+		p.ui.PodsDetails.RemoveItem(p.ui.PodData)
+		p.ui.PodsDetails.RemoveItem(p.ui.PodEvents)
+		p.ui.PodsDetails.AddItem(object, 0, 1, false)
+		p.onFocused(object)
 
-	switch p.state.details {
-	case detailsObject:
-		p.ui.PodData.SetTitle("Details")
-	case detailsEvents:
-	case detailsLog:
-		p.ui.PodData.SetTitle("Logs")
-	case detailsText:
-		p.ui.PodData.SetTitle("Text")
-	}
+		switch p.state.details {
+		case detailsObject:
+			p.ui.PodData.SetTitle("Details")
+		case detailsEvents:
+		case detailsLog:
+			p.ui.PodData.SetTitle("Logs")
+		case detailsText:
+			p.ui.PodData.SetTitle("Text")
+		}
+	})
 }
 
 func (p *Pods) initKeybindings() {
