@@ -70,21 +70,8 @@ func NewPods(ui *ui.UI, client k8s.Client, extManager ext.Manager) *Pods {
 		ext.Client(p.client),
 		ext.PickFrom(p.picker.PickFrom),
 		ext.ObjectSelectedActionChan(objSelectChan),
-		ext.DisplayText(
-			func(text string) error {
-				p.state.details = detailsText
-				p.ui.PodData.SetText(text).SetRegions(true).SetDynamicColors(true)
-				p.setDetailsView(p.ui.PodData)
-				return nil
-			},
-		),
-		ext.DisplayObject(
-			func(obj k8s.ObjectMetaGetter) error {
-				p.state.object = obj
-				p.showObject(obj)
-				return nil
-			},
-		),
+		ext.DisplayText(p.showText),
+		ext.DisplayObject(p.showObject),
 	); err != nil {
 		log.Println("Error starting extension manager:", err)
 	}
@@ -300,9 +287,8 @@ func (p *Pods) populatePods(ns string) error {
 			return
 		}
 
-		p.state.object = ref.(k8s.ObjectMetaGetter)
 		p.onFocused(p.ui.PodsTree)
-		p.showObject(p.state.object)
+		p.showObject(ref.(k8s.ObjectMetaGetter))
 	})
 
 	return nil
@@ -508,12 +494,24 @@ func (p *Pods) refreshFocused() {
 	}
 }
 
+func (p *Pods) showText(text string) {
+	p.state.details = detailsText
+	p.ui.PodData.SetText(text).SetRegions(true).SetDynamicColors(true)
+	p.setDetailsView(p.ui.PodData)
+}
+
 func (p *Pods) showObject(obj k8s.ObjectMetaGetter) {
 	if p.cancelWatchFn != nil {
 		p.cancelWatchFn()
 	}
 
 	p.client.FixObject(&obj)
+	p.state.object = obj
+
+	if p.state.details == detailsText {
+		p.state.details = detailsObject
+	}
+
 	switch p.state.details {
 	case detailsObject:
 		go func() {

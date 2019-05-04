@@ -10,8 +10,8 @@ type Option struct {
 	f func(*options)
 }
 
-type DisplayTextFunc func(string) error
-type DisplayObjectFunc func(k8s.ObjectMetaGetter) error
+type DisplayTextFunc func(string)
+type DisplayObjectFunc func(k8s.ObjectMetaGetter)
 type PickFromFunc func(title string, choices []string) <-chan string
 
 type ObjectSelectedAction func(k8s.ObjectMetaGetter) (ObjectSelectedData, error)

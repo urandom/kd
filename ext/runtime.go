@@ -76,14 +76,13 @@ func (rt runtime) ToYAML(v interface{}) (string, error) {
 	return string(b), nil
 }
 
-func (rt runtime) Display(v interface{}) error {
+func (rt runtime) Display(v interface{}) {
 	switch vv := v.(type) {
 	case string:
-		return rt.options.displayTextFunc(vv)
+		rt.options.displayTextFunc(vv)
 	case []byte:
-		return rt.options.displayTextFunc(string(vv))
+		rt.options.displayTextFunc(string(vv))
 	case k8s.ObjectMetaGetter:
-		return rt.options.displayObjectFunc(vv)
+		rt.options.displayObjectFunc(vv)
 	}
-	return nil
 }
