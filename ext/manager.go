@@ -28,9 +28,10 @@ func (m Manager) Start(
 
 	for name, e := range ext {
 		go func(name, e string) {
-			rt := runtime{
+			rt := &runtime{
 				options: o,
 				vm:      goja.New(),
+				ops:     make(chan func()),
 			}
 			rt.SetData()
 			log.Println("Running extension", name)
@@ -41,6 +42,7 @@ func (m Manager) Start(
 	return nil
 }
 
-func (m Manager) Run(ext string, rt runtime) {
+func (m Manager) Run(ext string, rt *runtime) {
 	rt.vm.RunString(ext)
+	rt.loop()
 }

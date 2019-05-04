@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 
 	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
@@ -51,6 +52,8 @@ type Pods struct {
 	cancelNSFn          context.CancelFunc
 	selectedActions     []ext.ObjectSelectedAction
 	selectedActionsData ext.ObjectSelectedDataSlice
+
+	mu sync.RWMutex
 }
 
 func NewPods(ui *ui.UI, client k8s.Client, extManager ext.Manager) *Pods {
@@ -79,7 +82,9 @@ func NewPods(ui *ui.UI, client k8s.Client, extManager ext.Manager) *Pods {
 	go func() {
 		for {
 			action := <-objSelectChan
+			p.mu.Lock()
 			p.selectedActions = append(p.selectedActions, action)
+			p.mu.Unlock()
 		}
 	}()
 
@@ -460,6 +465,8 @@ func (p *Pods) setupButtons() {
 	if _, ok := p.state.object.(*k8s.Deployment); ok {
 		p.ui.ActionBar.AddAction(7, "Scale")
 	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	if p.state.object != nil && len(p.selectedActions) > 0 {
 		p.selectedActionsData = make(ext.ObjectSelectedDataSlice, 0, len(p.selectedActions))
 		for _, action := range p.selectedActions {
