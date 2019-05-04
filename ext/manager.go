@@ -1,6 +1,8 @@
 package ext
 
 import (
+	"log"
+
 	"github.com/dop251/goja"
 	"golang.org/x/xerrors"
 )
@@ -24,15 +26,16 @@ func (m Manager) Start(
 	o := options{}
 	o.apply(opts...)
 
-	for _, e := range ext {
-		go func(e string) {
+	for name, e := range ext {
+		go func(name, e string) {
 			rt := runtime{
 				options: o,
 				vm:      goja.New(),
 			}
 			rt.SetData()
+			log.Println("Running extension", name)
 			m.Run(e, rt)
-		}(e)
+		}(name, e)
 	}
 
 	return nil
