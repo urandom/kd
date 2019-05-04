@@ -90,7 +90,7 @@ const AllNamespaces = " ALL "
 
 func (p *Pods) populateNamespaces() error {
 	log.Println("Getting cluster namespaces")
-	p.ui.StatusBar.SpinText("Loading namespaces", p.ui.App)
+	p.ui.StatusBar.SpinText("Loading namespaces")
 	defer p.ui.StatusBar.StopSpin()
 	p.ui.App.QueueUpdate(func() {
 		p.ui.Pages.SwitchToPage(ui.PagePods)
@@ -135,7 +135,7 @@ func (p *Pods) populateNamespaces() error {
 }
 
 func (p *Pods) populatePods(ns string) error {
-	p.ui.StatusBar.SpinText("Loading pods", p.ui.App)
+	p.ui.StatusBar.SpinText("Loading pods")
 	defer p.ui.StatusBar.StopSpin()
 
 	if p.cancelNSFn != nil {
@@ -163,114 +163,114 @@ func (p *Pods) populatePods(ns string) error {
 				if !open {
 					return
 				}
-				podTree := podWatcherEvent.Tree
-				controllerNames := []string{"Stateful Sets", "Deployments", "Daemon Sets", "Jobs", "Cron Jobs", "Services"}
-				controllers := [][]k8s.Controller{{}, {}, {}, {}, {}, {}}
-				for _, c := range podTree.StatefulSets {
-					controllers[0] = append(controllers[0], c)
-				}
-				for _, c := range podTree.Deployments {
-					controllers[1] = append(controllers[1], c)
-				}
-				for _, c := range podTree.DaemonSets {
-					controllers[2] = append(controllers[2], c)
-				}
-				for _, c := range podTree.Jobs {
-					controllers[3] = append(controllers[3], c)
-				}
-				for _, c := range podTree.CronJobs {
-					controllers[4] = append(controllers[4], c)
-				}
-				for _, c := range podTree.Services {
-					controllers[5] = append(controllers[5], c)
-				}
-
-				log.Printf("Updating tree view with pods for namespaces %s", ns)
-				p.state.namespace = ns
-
-				root := p.ui.PodsTree.GetRoot()
-				clsNodes := make([]*tview.TreeNode, 0, len(controllers))
-				for i, c := range controllers {
-					var clsNode *tview.TreeNode
-					for _, node := range root.GetChildren() {
-						if i == node.GetReference() {
-							if len(c) == 0 {
-								// Category is empty, remove the class node
-								break
-							}
-
-							clsNode = node
-							break
-						}
+				p.ui.App.QueueUpdateDraw(func() {
+					podTree := podWatcherEvent.Tree
+					controllerNames := []string{"Stateful Sets", "Deployments", "Daemon Sets", "Jobs", "Cron Jobs", "Services"}
+					controllers := [][]k8s.Controller{{}, {}, {}, {}, {}, {}}
+					for _, c := range podTree.StatefulSets {
+						controllers[0] = append(controllers[0], c)
+					}
+					for _, c := range podTree.Deployments {
+						controllers[1] = append(controllers[1], c)
+					}
+					for _, c := range podTree.DaemonSets {
+						controllers[2] = append(controllers[2], c)
+					}
+					for _, c := range podTree.Jobs {
+						controllers[3] = append(controllers[3], c)
+					}
+					for _, c := range podTree.CronJobs {
+						controllers[4] = append(controllers[4], c)
+					}
+					for _, c := range podTree.Services {
+						controllers[5] = append(controllers[5], c)
 					}
 
-					if clsNode == nil && len(c) > 0 {
-						// class not found, but category not empty
-						clsNode = tview.NewTreeNode(controllerNames[i]).
-							SetSelectable(true).
-							SetColor(tcell.ColorCoral).
-							SetReference(i)
-					}
+					log.Printf("Updating tree view with pods for namespaces %s", ns)
+					p.state.namespace = ns
 
-					if clsNode == nil {
-						continue
-					}
-
-					conNodes := make([]*tview.TreeNode, 0, len(c))
-					for _, controller := range c {
-						conName := controller.Controller().GetObjectMeta().GetName()
-						var conNode *tview.TreeNode
-						for _, node := range clsNode.GetChildren() {
-							ref := node.GetReference().(k8s.Controller)
-							if conName == ref.Controller().GetObjectMeta().GetName() {
-
-								podNodes := make([]*tview.TreeNode, 0, len(controller.Pods()))
-								for _, pod := range controller.Pods() {
-									var podNode *tview.TreeNode
-									for _, pNode := range node.GetChildren() {
-										podRef := pNode.GetReference().(*cv1.Pod)
-										if podRef.GetName() == pod.GetName() {
-											podNode = pNode
-											podNode.SetReference(pod)
-											break
-										}
-									}
-
-									if podNode == nil {
-										podNode = tview.NewTreeNode(pod.GetObjectMeta().GetName()).
-											SetReference(pod).SetSelectable(true)
-									}
-
-									podNodes = append(podNodes, podNode)
+					root := p.ui.PodsTree.GetRoot()
+					clsNodes := make([]*tview.TreeNode, 0, len(controllers))
+					for i, c := range controllers {
+						var clsNode *tview.TreeNode
+						for _, node := range root.GetChildren() {
+							if i == node.GetReference() {
+								if len(c) == 0 {
+									// Category is empty, remove the class node
+									break
 								}
 
-								conNode = node
-								conNode.SetReference(controller)
-								conNode.SetChildren(podNodes)
+								clsNode = node
 								break
 							}
 						}
 
-						if conNode == nil {
-							// controller not found
-							conNode = tview.NewTreeNode(conName).
-								SetReference(controller).SetSelectable(true)
-							for _, pod := range controller.Pods() {
-								podNode := tview.NewTreeNode(pod.GetObjectMeta().GetName()).
-									SetReference(pod).SetSelectable(true)
-								conNode.AddChild(podNode)
-							}
+						if clsNode == nil && len(c) > 0 {
+							// class not found, but category not empty
+							clsNode = tview.NewTreeNode(controllerNames[i]).
+								SetSelectable(true).
+								SetColor(tcell.ColorCoral).
+								SetReference(i)
 						}
 
-						conNodes = append(conNodes, conNode)
+						if clsNode == nil {
+							continue
+						}
+
+						conNodes := make([]*tview.TreeNode, 0, len(c))
+						for _, controller := range c {
+							conName := controller.Controller().GetObjectMeta().GetName()
+							var conNode *tview.TreeNode
+							for _, node := range clsNode.GetChildren() {
+								ref := node.GetReference().(k8s.Controller)
+								if conName == ref.Controller().GetObjectMeta().GetName() {
+
+									podNodes := make([]*tview.TreeNode, 0, len(controller.Pods()))
+									for _, pod := range controller.Pods() {
+										var podNode *tview.TreeNode
+										for _, pNode := range node.GetChildren() {
+											podRef := pNode.GetReference().(*cv1.Pod)
+											if podRef.GetName() == pod.GetName() {
+												podNode = pNode
+												podNode.SetReference(pod)
+												break
+											}
+										}
+
+										if podNode == nil {
+											podNode = tview.NewTreeNode(pod.GetObjectMeta().GetName()).
+												SetReference(pod).SetSelectable(true)
+										}
+
+										podNodes = append(podNodes, podNode)
+									}
+
+									conNode = node
+									conNode.SetReference(controller)
+									conNode.SetChildren(podNodes)
+									break
+								}
+							}
+
+							if conNode == nil {
+								// controller not found
+								conNode = tview.NewTreeNode(conName).
+									SetReference(controller).SetSelectable(true)
+								for _, pod := range controller.Pods() {
+									podNode := tview.NewTreeNode(pod.GetObjectMeta().GetName()).
+										SetReference(pod).SetSelectable(true)
+									conNode.AddChild(podNode)
+								}
+							}
+
+							conNodes = append(conNodes, conNode)
+						}
+						clsNode.SetChildren(conNodes)
+
+						clsNodes = append(clsNodes, clsNode)
 					}
-					clsNode.SetChildren(conNodes)
+					root.SetChildren(clsNodes)
 
-					clsNodes = append(clsNodes, clsNode)
-				}
-				root.SetChildren(clsNodes)
-
-				p.ui.App.QueueUpdateDraw(func() {
 					if p.ui.PodsTree.GetCurrentNode() == nil && len(root.GetChildren()) > 0 {
 						p.ui.PodsTree.SetCurrentNode(root.GetChildren()[0])
 					}
@@ -434,7 +434,7 @@ func (p *Pods) onFocused(primitive tview.Primitive) {
 	p.setupButtons()
 }
 
-func (p Pods) resetButtons() {
+func (p *Pods) resetButtons() {
 	p.ui.ActionBar.Clear()
 }
 

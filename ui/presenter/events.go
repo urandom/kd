@@ -29,7 +29,7 @@ func (p *Events) show(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
 	meta := object.GetObjectMeta()
 
 	log.Printf("Getting events for object %s", meta.GetName())
-	p.ui.StatusBar.SpinText("Loading events", p.ui.App)
+	p.ui.StatusBar.SpinText("Loading events")
 	defer p.ui.StatusBar.StopSpin()
 
 	list, err := p.client.Events(meta)

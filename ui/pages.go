@@ -18,7 +18,7 @@ func (ui *UI) setupPages() {
 	ui.PodData.SetBorder(true).SetTitle("Details")
 	ui.PodEvents = tview.NewTable().SetBorders(true)
 	ui.PodEvents.SetBorder(true).SetTitle("Events")
-	ui.StatusBar = NewStatusBar()
+	ui.StatusBar = NewStatusBar(ui.App)
 	ui.ActionBar = NewActionBar()
 
 	ui.Pages.AddPage(PagePods,

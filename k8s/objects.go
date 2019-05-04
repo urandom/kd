@@ -36,16 +36,47 @@ type Controller interface {
 	ObjectMetaGetter
 	Controller() ObjectMetaGetter
 	Selector() Selector
+	DeepCopy() Controller
+}
+
+type Controllers []Controller
+
+func (c Controllers) DeepCopy() Controllers {
+	dst := make(Controllers, len(c))
+
+	for i := range c {
+		dst[i] = c[i].DeepCopy()
+	}
+
+	return dst
 }
 
 type PodTree struct {
-	StatefulSets []Controller
-	Deployments  []Controller
-	DaemonSets   []Controller
-	Jobs         []Controller
-	CronJobs     []Controller
-	Services     []Controller
+	StatefulSets Controllers
+	Deployments  Controllers
+	DaemonSets   Controllers
+	Jobs         Controllers
+	CronJobs     Controllers
+	Services     Controllers
 	pods         []*cv1.Pod
+}
+
+func (p PodTree) DeepCopy() PodTree {
+	dst := PodTree{
+		StatefulSets: p.StatefulSets.DeepCopy(),
+		Deployments:  p.Deployments.DeepCopy(),
+		DaemonSets:   p.DaemonSets.DeepCopy(),
+		Jobs:         p.Jobs.DeepCopy(),
+		CronJobs:     p.CronJobs.DeepCopy(),
+		Services:     p.Services.DeepCopy(),
+		pods:         make([]*cv1.Pod, len(p.pods)),
+	}
+
+	for i := range p.pods {
+		dst.pods[i] = p.pods[i].DeepCopy()
+	}
+
+	return dst
 }
 
 type StatefulSet struct {
@@ -66,22 +97,32 @@ func (c *StatefulSet) Selector() Selector {
 	return c.Spec.Selector.MatchLabels
 }
 
-func (s *StatefulSet) Pods() []*cv1.Pod {
-	return s.pods
+func (c *StatefulSet) Pods() []*cv1.Pod {
+	return c.pods
 }
 
-func (s *StatefulSet) SetPods(pods []*cv1.Pod) {
-	s.pods = pods
+func (c *StatefulSet) SetPods(pods []*cv1.Pod) {
+	c.pods = pods
 }
 
-func newDeployment(o av1.Deployment, allPods []*cv1.Pod) *Deployment {
-	return &Deployment{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
+func (c *StatefulSet) DeepCopy() Controller {
+	dst := &StatefulSet{
+		*(c.StatefulSet.DeepCopy()),
+		make([]*cv1.Pod, len(c.pods)),
+	}
+	copy(dst.pods, c.pods)
+
+	return dst
 }
 
 type Deployment struct {
 	av1.Deployment
 
 	pods []*cv1.Pod
+}
+
+func newDeployment(o av1.Deployment, allPods []*cv1.Pod) *Deployment {
+	return &Deployment{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
 }
 
 func (c *Deployment) Controller() ObjectMetaGetter {
@@ -92,12 +133,22 @@ func (c *Deployment) Selector() Selector {
 	return c.Spec.Selector.MatchLabels
 }
 
-func (d *Deployment) Pods() []*cv1.Pod {
-	return d.pods
+func (c *Deployment) Pods() []*cv1.Pod {
+	return c.pods
 }
 
-func (s *Deployment) SetPods(pods []*cv1.Pod) {
-	s.pods = pods
+func (c *Deployment) SetPods(pods []*cv1.Pod) {
+	c.pods = pods
+}
+
+func (c *Deployment) DeepCopy() Controller {
+	dst := &Deployment{
+		*(c.Deployment.DeepCopy()),
+		make([]*cv1.Pod, len(c.pods)),
+	}
+	copy(dst.pods, c.pods)
+
+	return dst
 }
 
 type DaemonSet struct {
@@ -118,12 +169,22 @@ func (c *DaemonSet) Selector() Selector {
 	return c.Spec.Selector.MatchLabels
 }
 
-func (d *DaemonSet) Pods() []*cv1.Pod {
-	return d.pods
+func (c *DaemonSet) Pods() []*cv1.Pod {
+	return c.pods
 }
 
-func (s *DaemonSet) SetPods(pods []*cv1.Pod) {
-	s.pods = pods
+func (c *DaemonSet) SetPods(pods []*cv1.Pod) {
+	c.pods = pods
+}
+
+func (c *DaemonSet) DeepCopy() Controller {
+	dst := &DaemonSet{
+		*(c.DaemonSet.DeepCopy()),
+		make([]*cv1.Pod, len(c.pods)),
+	}
+	copy(dst.pods, c.pods)
+
+	return dst
 }
 
 type Job struct {
@@ -136,12 +197,12 @@ func newJob(o bv1.Job, allPods []*cv1.Pod) *Job {
 	return &Job{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
 }
 
-func (j *Job) Pods() []*cv1.Pod {
-	return j.pods
+func (c *Job) Pods() []*cv1.Pod {
+	return c.pods
 }
 
-func (s *Job) SetPods(pods []*cv1.Pod) {
-	s.pods = pods
+func (c *Job) SetPods(pods []*cv1.Pod) {
+	c.pods = pods
 }
 
 func (c *Job) Controller() ObjectMetaGetter {
@@ -150,6 +211,16 @@ func (c *Job) Controller() ObjectMetaGetter {
 
 func (c *Job) Selector() Selector {
 	return c.Spec.Selector.MatchLabels
+}
+
+func (c *Job) DeepCopy() Controller {
+	dst := &Job{
+		*(c.Job.DeepCopy()),
+		make([]*cv1.Pod, len(c.pods)),
+	}
+	copy(dst.pods, c.pods)
+
+	return dst
 }
 
 type CronJob struct {
@@ -187,8 +258,19 @@ func (c *CronJob) Pods() []*cv1.Pod {
 	return c.pods
 }
 
-func (s *CronJob) SetPods(pods []*cv1.Pod) {
-	s.pods = pods
+func (c *CronJob) SetPods(pods []*cv1.Pod) {
+	c.pods = pods
+}
+
+func (c *CronJob) DeepCopy() Controller {
+	dst := &CronJob{
+		*(c.CronJob.DeepCopy()),
+		c.selector,
+		make([]*cv1.Pod, len(c.pods)),
+	}
+	copy(dst.pods, c.pods)
+
+	return dst
 }
 
 type Service struct {
@@ -209,12 +291,22 @@ func (c *Service) Selector() Selector {
 	return c.Spec.Selector
 }
 
-func (s *Service) Pods() []*cv1.Pod {
-	return s.pods
+func (c *Service) Pods() []*cv1.Pod {
+	return c.pods
 }
 
-func (s *Service) SetPods(pods []*cv1.Pod) {
-	s.pods = pods
+func (c *Service) SetPods(pods []*cv1.Pod) {
+	c.pods = pods
+}
+
+func (c *Service) DeepCopy() Controller {
+	dst := &Service{
+		*(c.Service.DeepCopy()),
+		make([]*cv1.Pod, len(c.pods)),
+	}
+	copy(dst.pods, c.pods)
+
+	return dst
 }
 
 type PodWatcherEvent struct {
@@ -263,6 +355,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 
 	ch := make(chan PodWatcherEvent)
 	go func() {
+		ch <- PodWatcherEvent{Tree: tree.DeepCopy()}
 		for {
 			select {
 			case <-ctx.Done():
@@ -272,7 +365,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 			case ev := <-pw.ResultChan():
 				if o, ok := ev.Object.(*cv1.Pod); ok {
 					modifyPodInTree(&tree, o, ev.Type == watch.Deleted)
-					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
+					ch <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 				}
 			case ev := <-stsw.ResultChan():
 				if o, ok := ev.Object.(*av1.StatefulSet); ok {
@@ -282,9 +375,10 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 							return newStatefulSet(*o, tree.pods)
 						}
 					}
-					modifyControllerList(&tree.StatefulSets, o, factory)
+					tree.StatefulSets = modifyControllerList(
+						tree.StatefulSets, o, factory)
 
-					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
+					ch <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 				}
 			case ev := <-dw.ResultChan():
 				if o, ok := ev.Object.(*av1.Deployment); ok {
@@ -294,9 +388,10 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 							return newDeployment(*o, tree.pods)
 						}
 					}
-					modifyControllerList(&tree.Deployments, o, factory)
+					tree.Deployments = modifyControllerList(
+						tree.Deployments, o, factory)
 
-					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
+					ch <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 				}
 			case ev := <-dsw.ResultChan():
 				if o, ok := ev.Object.(*av1.DaemonSet); ok {
@@ -306,9 +401,10 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 							return newDaemonSet(*o, tree.pods)
 						}
 					}
-					modifyControllerList(&tree.DaemonSets, o, factory)
+					tree.DaemonSets = modifyControllerList(
+						tree.DaemonSets, o, factory)
 
-					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
+					ch <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 				}
 			case ev := <-jw.ResultChan():
 				if o, ok := ev.Object.(*bv1.Job); ok {
@@ -318,9 +414,10 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 							return newJob(*o, tree.pods)
 						}
 					}
-					modifyControllerList(&tree.Jobs, o, factory)
+					tree.Jobs = modifyControllerList(
+						tree.Jobs, o, factory)
 
-					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
+					ch <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 				}
 			case ev := <-cjw.ResultChan():
 				if o, ok := ev.Object.(*bv1b1.CronJob); ok {
@@ -330,9 +427,10 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 							return newCronJob(*o, tree.pods, tree.Jobs)
 						}
 					}
-					modifyControllerList(&tree.CronJobs, o, factory)
+					tree.CronJobs = modifyControllerList(
+						tree.CronJobs, o, factory)
 
-					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
+					ch <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 				}
 			case ev := <-sw.ResultChan():
 				if o, ok := ev.Object.(*cv1.Service); ok {
@@ -342,9 +440,10 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 							return newService(*o, tree.pods)
 						}
 					}
-					modifyControllerList(&tree.Services, o, factory)
+					tree.Services = modifyControllerList(
+						tree.Services, o, factory)
 
-					ch <- PodWatcherEvent{Tree: tree, EventType: ev.Type}
+					ch <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 				}
 			}
 		}
@@ -352,11 +451,10 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 
 	window := make(chan PodWatcherEvent)
 	go func() {
-		window <- PodWatcherEvent{Tree: tree}
-
 		var current PodWatcherEvent
 		trig := make(chan struct{})
 		canTrigger := true
+		initial := true
 		for {
 			select {
 			case <-ctx.Done():
@@ -369,7 +467,10 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					return
 				}
 				current = ev
-				if canTrigger {
+				if initial {
+					initial = false
+					window <- current
+				} else if canTrigger {
 					canTrigger = false
 					time.AfterFunc(500*time.Millisecond, func() { trig <- struct{}{} })
 				}
@@ -763,16 +864,16 @@ func modifyPodInList(pods []*cv1.Pod, pod *cv1.Pod, delete bool, labels map[stri
 	return pods
 }
 
-func modifyControllerList(controllers *[]Controller, o ObjectMetaGetter, factory ControllerFactory) {
+func modifyControllerList(controllers []Controller, o ObjectMetaGetter, factory ControllerFactory) []Controller {
 	found := false
-	for i := range *controllers {
-		if (*controllers)[i].GetObjectMeta().GetUID() == o.GetObjectMeta().GetUID() {
+	for i := range controllers {
+		if controllers[i].GetObjectMeta().GetUID() == o.GetObjectMeta().GetUID() {
 			if factory == nil {
-				copy((*controllers)[i:], (*controllers)[i+1:])
-				(*controllers)[len(*controllers)-1] = nil
-				*controllers = (*controllers)[:len(*controllers)-1]
+				copy(controllers[i:], controllers[i+1:])
+				controllers[len(controllers)-1] = nil
+				controllers = controllers[:len(controllers)-1]
 			} else {
-				(*controllers)[i] = factory()
+				controllers[i] = factory()
 			}
 		}
 		found = true
@@ -780,9 +881,11 @@ func modifyControllerList(controllers *[]Controller, o ObjectMetaGetter, factory
 	}
 
 	if !found && factory != nil {
-		(*controllers) = append(*controllers, factory())
-		sort.Slice(*controllers, func(i, j int) bool {
-			return (*controllers)[i].GetObjectMeta().GetName() < (*controllers)[i].GetObjectMeta().GetName()
+		controllers = append(controllers, factory())
+		sort.Slice(controllers, func(i, j int) bool {
+			return controllers[i].GetObjectMeta().GetName() < controllers[i].GetObjectMeta().GetName()
 		})
 	}
+
+	return controllers
 }

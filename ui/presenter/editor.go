@@ -106,7 +106,7 @@ func (p *Editor) delete(object k8s.ObjectMetaGetter) (err error) {
 	) {
 		return nil
 	}
-	p.ui.StatusBar.SpinText("Deleting "+object.GetObjectMeta().GetName(), p.ui.App)
+	p.ui.StatusBar.SpinText("Deleting " + object.GetObjectMeta().GetName())
 	defer p.ui.StatusBar.StopSpin()
 
 	return p.client.DeleteObject(object, time.Minute)

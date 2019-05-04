@@ -27,7 +27,7 @@ func NewLog(ui *ui.UI, client k8s.Client) *Log {
 
 func (p *Log) show(ctx context.Context, object k8s.ObjectMetaGetter, container string) (tview.Primitive, error) {
 	log.Println("Getting logs")
-	p.ui.StatusBar.SpinText("Loading logs", p.ui.App)
+	p.ui.StatusBar.SpinText("Loading logs")
 
 	p.ui.App.QueueUpdateDraw(func() {
 		p.ui.PodData.Clear().SetRegions(false).SetDynamicColors(true)
@@ -46,6 +46,11 @@ func (p *Log) show(ctx context.Context, object k8s.ObjectMetaGetter, container s
 
 	if err != nil {
 		return p.ui.PodData, err
+	}
+
+	if data == nil {
+		p.ui.StatusBar.StopSpin()
+		return p.ui.PodData, nil
 	}
 
 	go func() {
