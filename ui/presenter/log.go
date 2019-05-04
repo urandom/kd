@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
@@ -50,6 +51,7 @@ func (p *Log) show(ctx context.Context, object k8s.ObjectMetaGetter, container s
 
 	if data == nil {
 		p.ui.StatusBar.StopSpin()
+		p.ui.StatusBar.ShowTextFor("No containers with logs", 5*time.Second)
 		return p.ui.PodData, nil
 	}
 

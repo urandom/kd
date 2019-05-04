@@ -2,7 +2,7 @@ package ui
 
 import (
 	"fmt"
-	"log"
+	"strings"
 	"time"
 
 	"github.com/rivo/tview"
@@ -27,10 +27,16 @@ func (a ActionBar) AddAction(number int, text string) {
 	fmt.Fprintf(a.TextView, `["%d"][white:black]%s%d[black:aqua]%s[""]`, number, padding, number, text)
 }
 
+type statusState struct {
+	app      *tview.Application
+	spinning bool
+	idx      int
+}
+
 type StatusBar struct {
 	*tview.TextView
-	app   *tview.Application
 	stopC chan struct{}
+	ops   chan func(*statusState)
 }
 
 func NewStatusBar(app *tview.Application) StatusBar {
@@ -38,7 +44,12 @@ func NewStatusBar(app *tview.Application) StatusBar {
 		SetTextColor(tview.Styles.SecondaryTextColor).
 		SetWrap(false)
 	textView.SetBorderPadding(0, 0, 1, 1)
-	return StatusBar{TextView: textView, app: app, stopC: make(chan struct{})}
+
+	s := StatusBar{TextView: textView, stopC: make(chan struct{}), ops: make(chan func(*statusState))}
+
+	go s.loop(app)
+
+	return s
 }
 
 var spinners = [...]string{"⠋ ", "⠙ ", "⠹ ", "⠸ ", "⠼ ", "⠴ ", "⠦ ", "⠧ ", "⠇ ", "⠏ "}
@@ -46,57 +57,90 @@ var spinners = [...]string{"⠋ ", "⠙ ", "⠹ ", "⠸ ", "⠼ ", "⠴ ", "⠦ 
 func (s StatusBar) SpinText(text string) {
 	s.StopSpin()
 
-	s.app.QueueUpdateDraw(func() {
-		s.SetText(spinners[0] + text)
-	})
-	log.Println("0")
-	go func() {
-		i := 1
-		for {
-			select {
-			case <-s.stopC:
-				s.app.QueueUpdateDraw(func() {
-					log.Println("3")
-					s.SetText("")
-				})
-				log.Println("4")
-				return
-			case <-time.After(100 * time.Millisecond):
-				spin := i % len(spinners)
-				s.app.QueueUpdateDraw(func() {
-					s.SetText(spinners[spin] + text)
-				})
-				i++
-			}
-		}
-	}()
+	s.ops <- func(state *statusState) {
+		state.idx = 1
+		state.spinning = true
+		state.app.QueueUpdateDraw(func() {
+			s.TextView.SetText(spinners[0] + text)
+		})
+	}
+
+	s.spin(text)
 }
 
-func (s StatusBar) StopSpin() {
-	log.Println("2")
-	select {
-	case s.stopC <- struct{}{}:
-		log.Println("!!!!!!!!!!!!")
-	default:
-		log.Println("#########")
+func (s StatusBar) spin(text string) {
+	time.AfterFunc(100*time.Millisecond, func() {
+		s.ops <- func(state *statusState) {
+			if !state.spinning {
+				return
+			}
+
+			spin := state.idx % len(spinners)
+			state.idx++
+
+			state.app.QueueUpdateDraw(func() {
+				s.TextView.SetText(spinners[spin] + text)
+			})
+
+			s.spin(text)
+		}
+	})
+
+}
+
+func (s StatusBar) SetText(text string) {
+	s.ops <- func(state *statusState) {
+		state.app.QueueUpdateDraw(func() {
+			s.TextView.SetText(text)
+		})
 	}
 }
 
-func (s StatusBar) ShowTextFor(text string, d time.Duration, app *tview.Application) {
-	time.AfterFunc(250*time.Microsecond, func() {
-		app.QueueUpdateDraw(func() {
-			log.Println("1")
-			s.SetText(text)
+func (s StatusBar) Clear() {
+	s.ops <- func(state *statusState) {
+		state.app.QueueUpdateDraw(func() {
+			s.TextView.Clear()
 		})
-	})
+	}
+}
+
+func (s StatusBar) StopSpin() {
+	s.ops <- func(state *statusState) {
+		if state.spinning {
+			state.spinning = false
+			state.app.QueueUpdateDraw(func() {
+				s.TextView.SetText("")
+			})
+		}
+	}
+}
+
+func (s StatusBar) ShowTextFor(text string, d time.Duration) {
+	text = strings.TrimSpace(text)
+	s.SetText(text)
 
 	time.AfterFunc(d, func() {
-		app.QueueUpdateDraw(func() {
-			if s.GetText(false) == text {
-				s.Clear()
-			}
-		})
+		s.ops <- func(state *statusState) {
+			state.app.QueueUpdateDraw(func() {
+				if strings.TrimSpace(s.GetText(false)) == text {
+					s.TextView.Clear()
+				}
+			})
+		}
 	})
+}
+
+func (s StatusBar) loop(app *tview.Application) {
+	state := statusState{
+		app: app,
+	}
+
+	for {
+		select {
+		case op := <-s.ops:
+			op(&state)
+		}
+	}
 }
 
 type Modal struct {
