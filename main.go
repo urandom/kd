@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/pprof"
+	"strings"
 
 	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
@@ -19,7 +20,7 @@ import (
 var (
 	configF        = flag.String("kubeconfig", "", "path to kubeconfig file")
 	cpuProfileF    = flag.String("cpuprofile", "", "write cpu profile to file")
-	extensionPathF = flag.String("extensions", "", "path to extensions directory")
+	extensionPathF = flag.String("extensions", "", "path(s) to extensions directory. Comma separated")
 )
 
 func main() {
@@ -38,7 +39,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	loader, err := ext.NewLoader(*extensionPathF)
+	loader, err := ext.NewLoader(strings.Split(*extensionPathF, ",")...)
 	if err != nil {
 		log.Fatal(err)
 	}
