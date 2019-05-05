@@ -142,7 +142,7 @@ func (p *Editor) viewText() (err error) {
 	return err
 }
 
-func (p *Editor) delete(object k8s.ObjectMetaGetter) (err error) {
+func (p *Editor) delete(object k8s.ObjectMetaGetter) error {
 	if !<-p.confirm.DisplayConfirm(
 		"Warning",
 		"Are you sure you want to delete "+object.GetObjectMeta().GetName()+"?",
@@ -152,7 +152,22 @@ func (p *Editor) delete(object k8s.ObjectMetaGetter) (err error) {
 	p.ui.StatusBar.SpinText("Deleting " + object.GetObjectMeta().GetName())
 	defer p.ui.StatusBar.StopSpin()
 
-	return p.client.DeleteObject(object, time.Minute)
+	if err := p.client.DeleteObject(object, time.Minute); err != nil {
+		var unsupportedErr k8s.UnsupportedObjectError
+		if xerrors.As(err, &unsupportedErr) {
+			p.mu.RLock()
+			defer p.mu.RUnlock()
+			if actions, ok := p.actionGroups[unsupportedErr.TypeName]; ok && actions[ext.MutateDelete] != nil {
+				return actions[ext.MutateUpdate](object)
+			} else {
+				return xerrors.Errorf(
+					"Update not supported on %s: %w", unsupportedErr.TypeName, err)
+			}
+		}
+		return err
+	}
+
+	return nil
 }
 
 func (p *Editor) scaleDeployment(d *k8s.Deployment) (err error) {
