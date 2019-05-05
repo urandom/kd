@@ -3,7 +3,9 @@ package k8s
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	av1 "k8s.io/api/apps/v1"
@@ -17,6 +19,14 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/xerrors"
 )
+
+type UnsupportedObjectError struct {
+	TypeName string
+}
+
+func (e UnsupportedObjectError) Error() string {
+	return fmt.Sprintf("Object '%s' not supported", e.TypeName)
+}
 
 type PodManager interface {
 	Pods() []*cv1.Pod
@@ -670,6 +680,9 @@ func (c Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 		}
 
 		v.Service = *update
+	default:
+		typeName := strings.Split(fmt.Sprintf("%T", object), ".")[1]
+		return UnsupportedObjectError{TypeName: typeName}
 	}
 
 	return nil

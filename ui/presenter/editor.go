@@ -75,11 +75,16 @@ func (p *Editor) edit(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
 			}
 
 			if err = p.client.UpdateObject(object, json); err != nil {
-				if w := xerrors.Unwrap(err); w != nil {
-					if statusError, ok := w.(*kerrs.StatusError); ok {
-						msg = strings.SplitN(statusError.ErrStatus.Message, "\n", 2)[0] + "\n"
-						continue
-					}
+				var statusError *kerrs.StatusError
+
+				if xerrors.As(err, &statusError) {
+					msg = strings.SplitN(statusError.ErrStatus.Message, "\n", 2)[0] + "\n"
+					continue
+				}
+
+				var unsupportedErr k8s.UnsupportedObjectError
+				if xerrors.As(err, &unsupportedErr) {
+					return
 				}
 			}
 
