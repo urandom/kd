@@ -40,15 +40,21 @@ func (rt *runtime) RegisterActionOnObjectSelected(
 			if m, ok := val.Export().(map[string]interface{}); ok {
 				if rawCB, ok := m["cb"].(func(goja.FunctionCall) goja.Value); ok {
 					data.Callback = func() (err error) {
-						defer func() {
-							if r := recover(); r != nil {
-								err = xerrors.Errorf("js error on object selected callback: %v", r)
-							}
-						}()
+						errC := make(chan error)
 
-						rawCB(goja.FunctionCall{})
+						rt.ops <- func() {
+							defer func() {
+								if r := recover(); r == nil {
+									errC <- nil
+								} else {
+									errC <- xerrors.Errorf("js error on object selected callback: %v", r)
+								}
+							}()
 
-						return err
+							rawCB(goja.FunctionCall{})
+						}
+
+						return <-errC
 					}
 				}
 

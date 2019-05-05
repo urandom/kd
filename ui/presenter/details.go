@@ -35,7 +35,8 @@ func (p *Details) show(object k8s.ObjectMetaGetter) tview.Primitive {
 	}
 
 	p.ui.App.QueueUpdateDraw(func() {
-		p.ui.PodData.SetText("").SetRegions(true).SetDynamicColors(true)
+		p.ui.PodData.SetText("").SetRegions(true).
+			SetDynamicColors(true).ScrollToBeginning()
 		if data, err := yaml.Marshal(object); err == nil {
 			fmt.Fprint(p.ui.PodData, "[greenyellow::b]Summary\n=======\n\n")
 			p.printObjectSummary(p.ui.PodData, object)

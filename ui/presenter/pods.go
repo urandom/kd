@@ -505,7 +505,10 @@ func (p *Pods) refreshFocused() {
 
 func (p *Pods) showText(text string) {
 	p.state.details = detailsText
-	p.ui.PodData.SetText(text).SetRegions(true).SetDynamicColors(true)
+	p.ui.App.QueueUpdateDraw(func() {
+		p.ui.PodData.SetText(text).SetRegions(true).
+			SetDynamicColors(true).ScrollToBeginning()
+	})
 	p.setDetailsView(p.ui.PodData)
 }
 
