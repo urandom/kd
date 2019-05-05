@@ -22,12 +22,26 @@ type ObjectSelectedData struct {
 }
 type ObjectSelectedDataSlice []ObjectSelectedData
 
+type ObjectMutateAction string
+
+const (
+	MutateUpdate ObjectMutateAction = "update"
+	MutateDelete ObjectMutateAction = "delete"
+)
+
+type ObjectMutateActionFunc func(obj k8s.ObjectMetaGetter) error
+type RegisterObjectMutateActionsFunc func(
+	objTypeName string,
+	actions map[ObjectMutateAction]ObjectMutateActionFunc,
+)
+
 type options struct {
-	client             k8s.Client
-	displayTextFunc    DisplayTextFunc
-	displayObjectFunc  DisplayObjectFunc
-	pickFromFunc       PickFromFunc
-	objectSelectedChan chan<- ObjectSelectedAction
+	client                          k8s.Client
+	displayTextFunc                 DisplayTextFunc
+	displayObjectFunc               DisplayObjectFunc
+	pickFromFunc                    PickFromFunc
+	registerObjectMutateActionsFunc RegisterObjectMutateActionsFunc
+	objectSelectedChan              chan<- ObjectSelectedAction
 }
 
 func Client(c k8s.Client) Option {
@@ -51,6 +65,12 @@ func DisplayObject(f DisplayObjectFunc) Option {
 func PickFrom(f PickFromFunc) Option {
 	return Option{func(o *options) {
 		o.pickFromFunc = f
+	}}
+}
+
+func RegisterObjectMutateActions(f RegisterObjectMutateActionsFunc) Option {
+	return Option{func(o *options) {
+		o.registerObjectMutateActionsFunc = f
 	}}
 }
 

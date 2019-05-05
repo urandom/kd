@@ -62,10 +62,21 @@
         kd.Display(this.secrets[key])
     }
 
-    var Secrets = new Secrets()
+    Secrets.prototype.del = function(obj) {
+        kd.Client().CoreV1().Secrets(obj.Namespace).Delete(obj.Name, {"PropagationPolicy": "Foreground"})
+    }
+
+    Secrets.prototype.update = function(obj) {
+        kd.Client().CoreV1().Secrets(obj.Namespace).Update(obj, {})
+    }
+
+    var secrets = new Secrets()
 
     // Callback for when an object is selected in the tree
     // Return null if no action is to be taken.
     // Return ["Action name", callback] otherwise.
-    kd.RegisterActionOnObjectSelected(Secrets.onObjectSelected.bind(Secrets))
+    kd.RegisterActionOnObjectSelected(secrets.onObjectSelected.bind(secrets))
+
+    // Register callbacks that deal with object mutation of a certain type
+    kd.RegisterObjectMutateActions("Secret", {"delete": secrets.del.bind(secrets), "update": secrets.update.bind(secrets)})
 })()

@@ -40,10 +40,21 @@
         kd.Display(config)
     }
 
+    ConfigMap.prototype.del = function(obj) {
+        kd.Client().CoreV1().ConfigMaps(obj.Namespace).Delete(obj.Name, {"PropagationPolicy": "Foreground"})
+    }
+
+    ConfigMap.prototype.update = function(obj) {
+        kd.Client().CoreV1().ConfigMaps(obj.Namespace).Update(obj, {})
+    }
+
     var configMap = new ConfigMap()
 
     // Callback for when an object is selected in the tree
     // Return null if no action is to be taken.
     // Return ["Action name", callback] otherwise.
     kd.RegisterActionOnObjectSelected(configMap.onObjectSelected.bind(configMap))
+
+    // Register callbacks that deal with object mutation of a certain type
+    kd.RegisterObjectMutateActions("ConfigMap", {"delete": configMap.del.bind(configMap), "update": configMap.update.bind(configMap)})
 })()

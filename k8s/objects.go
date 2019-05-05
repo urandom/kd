@@ -712,6 +712,9 @@ func (c Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) err
 				}
 			}
 		}
+	default:
+		typeName := strings.Split(fmt.Sprintf("%T", object), ".")[1]
+		return UnsupportedObjectError{TypeName: typeName}
 	}
 
 	return nil

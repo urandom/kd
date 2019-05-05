@@ -74,6 +74,44 @@ func (rt *runtime) RegisterActionOnObjectSelected(
 	rt.options.objectSelectedChan <- normalized
 }
 
+func (rt *runtime) RegisterObjectMutateActions(typeName string, actions map[string]func(goja.FunctionCall) goja.Value) {
+	normalized := map[ObjectMutateAction]ObjectMutateActionFunc{}
+
+	for action, fn := range actions {
+		var nAction ObjectMutateAction
+
+		if action == string(MutateUpdate) {
+			nAction = MutateUpdate
+		} else if action == string(MutateDelete) {
+			nAction = MutateDelete
+		} else {
+			continue
+		}
+
+		nFn := func(obj k8s.ObjectMetaGetter) error {
+			errC := make(chan error)
+
+			rt.ops <- func() {
+				defer func() {
+					if r := recover(); r != nil {
+						errC <- xerrors.Errorf("js error on mutate action %s: %v", nAction, r)
+					} else {
+						errC <- nil
+					}
+				}()
+
+				fn(goja.FunctionCall{Arguments: []goja.Value{rt.vm.ToValue(obj)}})
+			}
+
+			return <-errC
+		}
+
+		normalized[nAction] = nFn
+	}
+
+	rt.options.registerObjectMutateActionsFunc(typeName, normalized)
+}
+
 func (rt *runtime) Client() k8s.Client {
 	return rt.options.client
 }
