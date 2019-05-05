@@ -381,9 +381,9 @@ func (p *Pods) initKeybindings() {
 						p.DisplayError(err)
 					}()
 				case detailsEvents:
-				case detailsLog:
+				case detailsLog, detailsText:
 					go func() {
-						p.DisplayError(p.editor.viewLog())
+						p.DisplayError(p.editor.viewText())
 					}()
 				}
 				return nil
@@ -455,7 +455,7 @@ func (p *Pods) setupButtons() {
 		case detailsObject:
 			p.ui.ActionBar.AddAction(4, "Edit")
 		case detailsEvents:
-		case detailsLog:
+		case detailsLog, detailsText:
 			p.ui.ActionBar.AddAction(4, "View")
 		}
 	}

@@ -133,7 +133,7 @@ func (p *Editor) edit(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
 	return nil, err
 }
 
-func (p *Editor) viewLog() (err error) {
+func (p *Editor) viewText() (err error) {
 	log := p.ui.PodData.GetText(true)
 	p.ui.App.Suspend(func() {
 		_, err = externalEditor([]byte(log), false)
