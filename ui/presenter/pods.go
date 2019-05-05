@@ -515,7 +515,6 @@ func (p *Pods) showObject(obj k8s.ObjectMetaGetter) {
 	}
 
 	p.state.object = obj
-	obj = p.client.FixObject(obj)
 
 	if p.state.details == detailsText {
 		p.state.details = detailsObject

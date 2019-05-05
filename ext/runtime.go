@@ -1,6 +1,7 @@
 package ext
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/dop251/goja"
@@ -79,6 +80,7 @@ func (rt *runtime) SetData() {
 	rt.vm.Set("kd", rt)
 	rt.vm.Set("log", log.Println)
 	rt.vm.Set("logf", log.Printf)
+	rt.vm.Set("sprintf", fmt.Sprintf)
 }
 
 func (rt *runtime) ToYAML(v interface{}) (string, error) {

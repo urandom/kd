@@ -704,54 +704,6 @@ func (c Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) err
 	return nil
 }
 
-func (c Client) FixObject(object ObjectMetaGetter) ObjectMetaGetter {
-	if object.GetObjectKind().GroupVersionKind().Kind == "" {
-		if v, ok := object.(Controller); ok {
-			object = v.Controller()
-		}
-		switch v := object.(type) {
-		case *cv1.Pod:
-			v.TypeMeta.Kind = "Pod"
-			v.TypeMeta.APIVersion = "v1"
-			return v
-		case *av1.StatefulSet:
-			v.TypeMeta.Kind = "StatefulSet"
-			v.TypeMeta.APIVersion = "apps/v1"
-			return v
-		case *av1.Deployment:
-			v.TypeMeta.Kind = "Deployment"
-			v.TypeMeta.APIVersion = "extensions/v1beta1"
-			return v
-		case *av1.DaemonSet:
-			v.TypeMeta.Kind = "DaemonSet"
-			v.TypeMeta.APIVersion = "extensions/v1beta1"
-			return v
-		case *bv1.Job:
-			v.TypeMeta.Kind = "Job"
-			v.TypeMeta.APIVersion = "batch/v1"
-			return v
-		case *bv1b1.CronJob:
-			v.TypeMeta.Kind = "CronJob"
-			v.TypeMeta.APIVersion = "batch/v1beta1"
-			return v
-		case *cv1.Service:
-			v.TypeMeta.Kind = "Service"
-			v.TypeMeta.APIVersion = "v1"
-			return v
-		case *cv1.ConfigMap:
-			v.TypeMeta.Kind = "ConfigMap"
-			v.TypeMeta.APIVersion = "v1"
-			return v
-		case *cv1.Secret:
-			v.TypeMeta.Kind = "Secret"
-			v.TypeMeta.APIVersion = "v1"
-			return v
-		}
-	}
-
-	return object
-}
-
 func matchPods(pods []*cv1.Pod, selector map[string]string) []*cv1.Pod {
 	if len(selector) == 0 {
 		return nil
