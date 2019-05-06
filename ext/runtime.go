@@ -3,6 +3,7 @@ package ext
 import (
 	"fmt"
 	"log"
+	"sort"
 
 	"github.com/dop251/goja"
 	"github.com/urandom/kd/k8s"
@@ -155,6 +156,7 @@ func (rt *runtime) Client() k8s.Client {
 }
 
 func (rt *runtime) PickFrom(title string, choices []string) string {
+	sort.Strings(choices)
 	return <-rt.options.pickFromFunc(title, choices)
 }
 
