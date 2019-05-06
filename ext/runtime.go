@@ -71,7 +71,7 @@ func (rt *runtime) RegisterActionOnObjectSelected(
 		return p.data, p.err
 	}
 
-	rt.options.objectSelectedChan <- normalized
+	rt.options.registerObjectSelectActionFunc(normalized)
 }
 
 func (rt *runtime) RegisterObjectMutateActions(typeName string, actions map[string]func(goja.FunctionCall) goja.Value) {

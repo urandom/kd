@@ -68,26 +68,20 @@ func NewPods(ui *ui.UI, client k8s.Client, extManager ext.Manager) *Pods {
 	}
 	p.state.namespace = "___"
 
-	objSelectChan := make(chan ext.ObjectSelectedAction)
 	if err := extManager.Start(
 		ext.Client(p.client),
 		ext.PickFrom(p.picker.PickFrom),
-		ext.ObjectSelectedActionChan(objSelectChan),
 		ext.DisplayText(p.showText),
 		ext.DisplayObject(p.showObject),
+		ext.RegisterObjectSelectAction(func(action ext.ObjectSelectedAction) {
+			p.mu.Lock()
+			p.selectedActions = append(p.selectedActions, action)
+			p.mu.Unlock()
+		}),
 		ext.RegisterObjectMutateActions(p.editor.RegisterObjectMutateActions),
 	); err != nil {
 		log.Println("Error starting extension manager:", err)
 	}
-
-	go func() {
-		for {
-			action := <-objSelectChan
-			p.mu.Lock()
-			p.selectedActions = append(p.selectedActions, action)
-			p.mu.Unlock()
-		}
-	}()
 
 	return p
 }

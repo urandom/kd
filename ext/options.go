@@ -22,6 +22,10 @@ type ObjectSelectedData struct {
 }
 type ObjectSelectedDataSlice []ObjectSelectedData
 
+type RegisterObjectSelectActionFunc func(
+	callback ObjectSelectedAction,
+)
+
 type ObjectMutateAction string
 
 const (
@@ -40,8 +44,8 @@ type options struct {
 	displayTextFunc                 DisplayTextFunc
 	displayObjectFunc               DisplayObjectFunc
 	pickFromFunc                    PickFromFunc
+	registerObjectSelectActionFunc  RegisterObjectSelectActionFunc
 	registerObjectMutateActionsFunc RegisterObjectMutateActionsFunc
-	objectSelectedChan              chan<- ObjectSelectedAction
 }
 
 func Client(c k8s.Client) Option {
@@ -68,15 +72,15 @@ func PickFrom(f PickFromFunc) Option {
 	}}
 }
 
-func RegisterObjectMutateActions(f RegisterObjectMutateActionsFunc) Option {
+func RegisterObjectSelectAction(f RegisterObjectSelectActionFunc) Option {
 	return Option{func(o *options) {
-		o.registerObjectMutateActionsFunc = f
+		o.registerObjectSelectActionFunc = f
 	}}
 }
 
-func ObjectSelectedActionChan(ch chan<- ObjectSelectedAction) Option {
+func RegisterObjectMutateActions(f RegisterObjectMutateActionsFunc) Option {
 	return Option{func(o *options) {
-		o.objectSelectedChan = ch
+		o.registerObjectMutateActionsFunc = f
 	}}
 }
 
