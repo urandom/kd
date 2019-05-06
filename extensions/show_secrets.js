@@ -40,7 +40,7 @@
         if (this.names.length > 1) {
             // Displays a list dialog with the string array, returning the
             // user-selected one
-            name = kd.Choose("Secrets", this.names)
+            name = kd.PickFrom("Secrets", this.names)
         }
 
         // Client holds the k8s.Client object
@@ -54,8 +54,9 @@
         var keys = Object.keys(this.secrets)
         var key = keys[0];
 
+        logf("Secret keys: %v, secrets: %v", keys, this.secrets)
         if (keys.length > 1) {
-            key = kd.Choose("Secret keys", keys)
+            key = kd.PickFrom("Secret keys", keys)
         }
 
         // Display can show plain text, or a k8s object

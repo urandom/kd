@@ -31,7 +31,7 @@
         if (this.names.length > 1) {
             // Displays a list dialog with the string array, returning the
             // user-selected one
-            name = kd.Choose("Persistent Volume Claims", this.names)
+            name = kd.PickFrom("Persistent Volume Claims", this.names)
         }
 
         // Client holds the k8s.Client object

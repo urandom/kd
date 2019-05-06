@@ -154,7 +154,7 @@ func (rt *runtime) Client() k8s.Client {
 	return rt.options.client
 }
 
-func (rt *runtime) Choose(title string, choices []string) string {
+func (rt *runtime) PickFrom(title string, choices []string) string {
 	return <-rt.options.pickFromFunc(title, choices)
 }
 
