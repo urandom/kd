@@ -72,20 +72,22 @@ func (s StatusBar) SpinText(text string) {
 func (s StatusBar) spin(text string) {
 	s.ops <- func(state *statusState) {
 		state.timer = time.AfterFunc(100*time.Millisecond, func() {
-			s.ops <- func(state *statusState) {
-				if !state.spinning {
-					return
+			go func() {
+				s.ops <- func(state *statusState) {
+					if !state.spinning {
+						return
+					}
+
+					spin := state.idx % len(spinners)
+					state.idx++
+
+					state.app.QueueUpdateDraw(func() {
+						s.TextView.SetText(spinners[spin] + text)
+					})
+
+					go s.spin(text)
 				}
-
-				spin := state.idx % len(spinners)
-				state.idx++
-
-				state.app.QueueUpdateDraw(func() {
-					s.TextView.SetText(spinners[spin] + text)
-				})
-
-				s.spin(text)
-			}
+			}()
 		})
 	}
 
@@ -113,6 +115,7 @@ func (s StatusBar) StopSpin() {
 			state.timer.Stop()
 			state.timer = nil
 		}
+
 		if state.spinning {
 			state.spinning = false
 			state.app.QueueUpdateDraw(func() {
