@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rivo/tview"
+	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
 	av1 "k8s.io/api/apps/v1"
@@ -18,15 +20,27 @@ import (
 )
 
 type Details struct {
-	ui     *ui.UI
-	client k8s.Client
+	ui        *ui.UI
+	client    k8s.Client
+	mu        sync.RWMutex
+	summaries map[string]ext.ObjectSummaryProvider
 }
 
 func NewDetails(ui *ui.UI, client k8s.Client) *Details {
 	return &Details{
-		ui:     ui,
-		client: client,
+		ui:        ui,
+		client:    client,
+		summaries: map[string]ext.ObjectSummaryProvider{},
 	}
+}
+
+func (p *Details) RegisterObjectMutateActions(
+	typeName string,
+	summary ext.ObjectSummaryProvider,
+) {
+	p.mu.Lock()
+	p.summaries[typeName] = summary
+	p.mu.Unlock()
 }
 
 func (p *Details) show(object k8s.ObjectMetaGetter) tview.Primitive {
@@ -51,6 +65,9 @@ func (p *Details) show(object k8s.ObjectMetaGetter) tview.Primitive {
 }
 
 func (p *Details) printObjectSummary(w io.Writer, object k8s.ObjectMetaGetter) {
+	typeName := strings.Split(fmt.Sprintf("%T", object), ".")[1]
+	fmt.Fprintf(w, "[lightgreen::b]%s: [white::-]%s\n", typeName, object.GetObjectMeta().GetName())
+
 	if object.GetObjectMeta().GetDeletionTimestamp() != nil {
 		fmt.Fprintf(w, "[skyblue::b]Delete request:[white::-] %s\n", duration.HumanDuration(object.GetObjectMeta().GetDeletionTimestamp().Sub(time.Now())))
 	}
@@ -126,7 +143,16 @@ func (p *Details) printObjectSummary(w io.Writer, object k8s.ObjectMetaGetter) {
 		fmt.Fprintf(w, "[skyblue::b]Ports:[white::-] %s\n", portsToString(v.Spec.Ports))
 		fmt.Fprintf(w, "[skyblue::b]Age:[white::-] %s\n", duration.HumanDuration(time.Since(v.ObjectMeta.CreationTimestamp.Time)))
 	default:
-		fmt.Fprintf(w, "[skyblue::b]Type:[::] %T\n", v)
+		p.mu.RLock()
+		defer p.mu.RUnlock()
+
+		if provider, ok := p.summaries[typeName]; ok {
+			if summary, err := provider(object); err == nil {
+				fmt.Fprintf(w, summary)
+			} else {
+				fmt.Fprintf(w, "[red]Error during summary provision: %v[white]\n", err)
+			}
+		}
 	}
 	fmt.Fprintln(w, "")
 }

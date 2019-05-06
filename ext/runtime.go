@@ -19,6 +19,10 @@ type runtime struct {
 func (rt *runtime) RegisterActionOnObjectSelected(
 	cb func(goja.FunctionCall) goja.Value,
 ) {
+	if rt.options.registerObjectSelectActionFunc == nil {
+		return
+	}
+
 	normalized := func(obj k8s.ObjectMetaGetter) (ObjectSelectedData, error) {
 		type payload struct {
 			data ObjectSelectedData
@@ -75,6 +79,10 @@ func (rt *runtime) RegisterActionOnObjectSelected(
 }
 
 func (rt *runtime) RegisterObjectMutateActions(typeName string, actions map[string]func(goja.FunctionCall) goja.Value) {
+	if rt.options.registerObjectMutateActionsFunc == nil {
+		return
+	}
+
 	normalized := map[ObjectMutateAction]ObjectMutateActionFunc{}
 
 	for action, fn := range actions {
@@ -112,6 +120,36 @@ func (rt *runtime) RegisterObjectMutateActions(typeName string, actions map[stri
 	rt.options.registerObjectMutateActionsFunc(typeName, normalized)
 }
 
+func (rt *runtime) RegisterObjectSummaryProvider(typeName string, provider func(goja.FunctionCall) goja.Value) {
+	if rt.options.registerObjectSummaryProviderFunc == nil {
+		return
+	}
+
+	normalized := func(obj k8s.ObjectMetaGetter) (string, error) {
+		type payload struct {
+			data string
+			err  error
+		}
+		payloadC := make(chan payload)
+
+		rt.ops <- func() {
+			defer func() {
+				if r := recover(); r != nil {
+					payloadC <- payload{err: xerrors.Errorf("js error on summary provision: %v", r)}
+				}
+			}()
+
+			val := provider(goja.FunctionCall{Arguments: []goja.Value{rt.vm.ToValue(obj)}})
+			payloadC <- payload{data: val.String()}
+		}
+
+		p := <-payloadC
+		return p.data, p.err
+	}
+
+	rt.options.registerObjectSummaryProviderFunc(typeName, normalized)
+}
+
 func (rt *runtime) Client() k8s.Client {
 	return rt.options.client
 }
@@ -125,6 +163,12 @@ func (rt *runtime) SetData() {
 	rt.vm.Set("log", log.Println)
 	rt.vm.Set("logf", log.Printf)
 	rt.vm.Set("sprintf", fmt.Sprintf)
+	rt.vm.Set("derefString", func(s *string) string {
+		if s == nil {
+			return ""
+		}
+		return *s
+	})
 }
 
 func (rt *runtime) ToYAML(v interface{}) (string, error) {

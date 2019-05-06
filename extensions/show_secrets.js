@@ -70,6 +70,14 @@
         kd.Client().CoreV1().Secrets(obj.Namespace).Update(obj, {})
     }
 
+    Secrets.prototype.summary = function(obj) {
+        return sprintf(
+            "[skyblue::b]Type:[white::-] %s\n[skyblue::b]Data:[white::-] %d\n",
+            obj.Type,
+            Object.keys(obj.Data).length
+        )
+    }
+
     var secrets = new Secrets()
 
     // Callback for when an object is selected in the tree
@@ -79,4 +87,7 @@
 
     // Register callbacks that deal with object mutation of a certain type
     kd.RegisterObjectMutateActions("Secret", {"delete": secrets.del.bind(secrets), "update": secrets.update.bind(secrets)})
+
+    // Register callbacks that deal with object mutation of a certain type
+    kd.RegisterObjectSummaryProvider("Secret", secrets.summary.bind(secrets))
 })()

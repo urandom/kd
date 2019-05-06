@@ -48,6 +48,10 @@
         kd.Client().CoreV1().ConfigMaps(obj.Namespace).Update(obj, {})
     }
 
+    ConfigMap.prototype.summary = function(obj) {
+        return sprintf("[skyblue::b]Data:[white::-] %d\n", Object.keys(obj.Data).length)
+    }
+
     var configMap = new ConfigMap()
 
     // Callback for when an object is selected in the tree
@@ -57,4 +61,7 @@
 
     // Register callbacks that deal with object mutation of a certain type
     kd.RegisterObjectMutateActions("ConfigMap", {"delete": configMap.del.bind(configMap), "update": configMap.update.bind(configMap)})
+
+    // Register callbacks that deal with object mutation of a certain type
+    kd.RegisterObjectSummaryProvider("ConfigMap", configMap.summary.bind(configMap))
 })()

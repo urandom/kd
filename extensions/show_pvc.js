@@ -49,6 +49,19 @@
         kd.Client().CoreV1().PersistentVolumeClaims(obj.Namespace).Update(obj, {})
     }
 
+    PVC.prototype.summary = function(obj) {
+        return sprintf(
+            "[skyblue::b]Status:[white::-] %s\n" +
+            "[skyblue::b]Volume:[white::-] %s\n" +
+            "[skyblue::b]Access Modes:[white::-] %s\n" +
+            "[skyblue::b]Storage Class:[white::-] %s\n",
+            obj.Status.Phase,
+            obj.Spec.VolumeName,
+            obj.Status.AccessModes.join(", "),
+            derefString(obj.Spec.StorageClassName)
+        )
+    }
+
     var pvc = new PVC()
 
     // Callback for when an object is selected in the tree
@@ -58,4 +71,7 @@
 
     // Register callbacks that deal with object mutation of a certain type
     kd.RegisterObjectMutateActions("PersistentVolumeClaim", {"delete": pvc.del.bind(pvc), "update": pvc.update.bind(pvc)})
+
+    // Register callbacks that deal with object mutation of a certain type
+    kd.RegisterObjectSummaryProvider("PersistentVolumeClaim", pvc.summary.bind(pvc))
 })()

@@ -35,17 +35,24 @@ const (
 
 type ObjectMutateActionFunc func(obj k8s.ObjectMetaGetter) error
 type RegisterObjectMutateActionsFunc func(
-	objTypeName string,
+	typeName string,
 	actions map[ObjectMutateAction]ObjectMutateActionFunc,
 )
 
+type ObjectSummaryProvider func(k8s.ObjectMetaGetter) (string, error)
+type RegisterObjectSummaryProviderFunc func(
+	typeName string,
+	provider ObjectSummaryProvider,
+)
+
 type options struct {
-	client                          k8s.Client
-	displayTextFunc                 DisplayTextFunc
-	displayObjectFunc               DisplayObjectFunc
-	pickFromFunc                    PickFromFunc
-	registerObjectSelectActionFunc  RegisterObjectSelectActionFunc
-	registerObjectMutateActionsFunc RegisterObjectMutateActionsFunc
+	client                            k8s.Client
+	displayTextFunc                   DisplayTextFunc
+	displayObjectFunc                 DisplayObjectFunc
+	pickFromFunc                      PickFromFunc
+	registerObjectSelectActionFunc    RegisterObjectSelectActionFunc
+	registerObjectMutateActionsFunc   RegisterObjectMutateActionsFunc
+	registerObjectSummaryProviderFunc RegisterObjectSummaryProviderFunc
 }
 
 func Client(c k8s.Client) Option {
@@ -81,6 +88,12 @@ func RegisterObjectSelectAction(f RegisterObjectSelectActionFunc) Option {
 func RegisterObjectMutateActions(f RegisterObjectMutateActionsFunc) Option {
 	return Option{func(o *options) {
 		o.registerObjectMutateActionsFunc = f
+	}}
+}
+
+func RegisterObjectSummaryProvider(f RegisterObjectSummaryProviderFunc) Option {
+	return Option{func(o *options) {
+		o.registerObjectSummaryProviderFunc = f
 	}}
 }
 
