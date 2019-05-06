@@ -31,6 +31,7 @@ type statusState struct {
 	app      *tview.Application
 	spinning bool
 	idx      int
+	timer    *time.Timer
 }
 
 type StatusBar struct {
@@ -69,22 +70,24 @@ func (s StatusBar) SpinText(text string) {
 }
 
 func (s StatusBar) spin(text string) {
-	time.AfterFunc(100*time.Millisecond, func() {
-		s.ops <- func(state *statusState) {
-			if !state.spinning {
-				return
+	s.ops <- func(state *statusState) {
+		state.timer = time.AfterFunc(100*time.Millisecond, func() {
+			s.ops <- func(state *statusState) {
+				if !state.spinning {
+					return
+				}
+
+				spin := state.idx % len(spinners)
+				state.idx++
+
+				state.app.QueueUpdateDraw(func() {
+					s.TextView.SetText(spinners[spin] + text)
+				})
+
+				s.spin(text)
 			}
-
-			spin := state.idx % len(spinners)
-			state.idx++
-
-			state.app.QueueUpdateDraw(func() {
-				s.TextView.SetText(spinners[spin] + text)
-			})
-
-			s.spin(text)
-		}
-	})
+		})
+	}
 
 }
 
@@ -106,6 +109,10 @@ func (s StatusBar) Clear() {
 
 func (s StatusBar) StopSpin() {
 	s.ops <- func(state *statusState) {
+		if state.timer != nil {
+			state.timer.Stop()
+			state.timer = nil
+		}
 		if state.spinning {
 			state.spinning = false
 			state.app.QueueUpdateDraw(func() {
