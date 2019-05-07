@@ -21,8 +21,8 @@ func NewLoader(paths ...string) (Loader, error) {
 	}
 	defaultPaths := []string{
 		filepath.Join(home, ".local", "share", "kd", "extensions"),
-		filepath.Join("usr", "local", "share", "kd", "extensions"),
-		filepath.Join("usr", "share", "kd", "extensions"),
+		filepath.Join("/", "usr", "local", "share", "kd", "extensions"),
+		filepath.Join("/", "usr", "share", "kd", "extensions"),
 	}
 
 	pathSet := map[string]struct{}{}
@@ -42,6 +42,7 @@ func NewLoader(paths ...string) (Loader, error) {
 func (l Loader) Extensions() (map[string]string, error) {
 	data := map[string]string{}
 	for _, pa := range l.paths {
+		log.Println("Looking up extensions in path", pa)
 		paths, err := filepath.Glob(filepath.Join(pa, "*.js"))
 		if err != nil {
 			return nil, xerrors.Errorf("getting list of extensions: %w", err)
