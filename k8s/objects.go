@@ -110,38 +110,22 @@ type Ctrl struct {
 	pods     Pods
 }
 
-func newStatefulSetCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
-	return &Ctrl{o, CategoryStatefulSet, selector, matchPods(allPods, selector)}
+func newGenericCtrl(o ObjectMetaGetter, category Category, selector Selector, allPods Pods) *Ctrl {
+	return &Ctrl{o, category, selector, matchPods(allPods, selector)}
 }
 
-func newDeploymentCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
-	return &Ctrl{o, CategoryDeployment, selector, matchPods(allPods, selector)}
-}
-
-func newDaemonSetCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
-	return &Ctrl{o, CategoryDaemonSet, selector, matchPods(allPods, selector)}
-}
-
-func newJobCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
-	return &Ctrl{o, CategoryJob, selector, matchPods(allPods, selector)}
-}
-
-func newCronJobCtrl(o ObjectMetaGetter, jobs []Controller, allPods Pods) *Ctrl {
+func newInheritCtrl(o ObjectMetaGetter, category Category, tree PodTree) *Ctrl {
 	selector := Selector{}
-	for _, j := range jobs {
-		for _, owner := range j.GetObjectMeta().GetOwnerReferences() {
+	for _, c := range tree.Controllers {
+		for _, owner := range c.GetObjectMeta().GetOwnerReferences() {
 			if owner.UID == o.GetObjectMeta().GetUID() {
-				for k, v := range j.Selector() {
+				for k, v := range c.Selector() {
 					selector[k] = v
 				}
 			}
 		}
 	}
-	return &Ctrl{o, CategoryCronJob, selector, matchPods(allPods, selector)}
-}
-
-func newServiceCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
-	return &Ctrl{o, CategoryService, selector, matchPods(allPods, selector)}
+	return &Ctrl{o, category, selector, matchPods(tree.pods, selector)}
 }
 
 func (c *Ctrl) Controller() ObjectMetaGetter {
@@ -270,7 +254,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
-							return newStatefulSetCtrl(o, o.Spec.Selector.MatchLabels, tree.pods)
+							return newGenericCtrl(o, CategoryStatefulSet, o.Spec.Selector.MatchLabels, tree.pods)
 						}
 					}
 					tree.Controllers = modifyControllerList(
@@ -283,7 +267,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
-							return newDeploymentCtrl(o, o.Spec.Selector.MatchLabels, tree.pods)
+							return newGenericCtrl(o, CategoryDeployment, o.Spec.Selector.MatchLabels, tree.pods)
 						}
 					}
 					tree.Controllers = modifyControllerList(
@@ -296,7 +280,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
-							return newDaemonSetCtrl(o, o.Spec.Selector.MatchLabels, tree.pods)
+							return newGenericCtrl(o, CategoryDaemonSet, o.Spec.Selector.MatchLabels, tree.pods)
 						}
 					}
 					tree.Controllers = modifyControllerList(
@@ -309,7 +293,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
-							return newJobCtrl(o, o.Spec.Selector.MatchLabels, tree.pods)
+							return newGenericCtrl(o, CategoryJob, o.Spec.Selector.MatchLabels, tree.pods)
 						}
 					}
 					tree.Controllers = modifyControllerList(
@@ -322,7 +306,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
-							return newCronJobCtrl(o, tree.Controllers, tree.pods)
+							return newInheritCtrl(o, CategoryCronJob, tree)
 						}
 					}
 					tree.Controllers = modifyControllerList(
@@ -335,7 +319,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
-							return newServiceCtrl(o, o.Spec.Selector, tree.pods)
+							return newGenericCtrl(o, CategoryService, o.Spec.Selector, tree.pods)
 						}
 					}
 					tree.Controllers = modifyControllerList(
@@ -457,32 +441,32 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 	}
 	for _, o := range statefulsets.Items {
 		o := o
-		tree.Controllers = append(tree.Controllers, newStatefulSetCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
+		tree.Controllers = append(tree.Controllers, newGenericCtrl(&o, CategoryStatefulSet, o.Spec.Selector.MatchLabels, tree.pods))
 	}
 
 	for _, o := range deployments.Items {
 		o := o
-		tree.Controllers = append(tree.Controllers, newDeploymentCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
+		tree.Controllers = append(tree.Controllers, newGenericCtrl(&o, CategoryDeployment, o.Spec.Selector.MatchLabels, tree.pods))
 	}
 
 	for _, o := range daemonsets.Items {
 		o := o
-		tree.Controllers = append(tree.Controllers, newDaemonSetCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
+		tree.Controllers = append(tree.Controllers, newGenericCtrl(&o, CategoryDaemonSet, o.Spec.Selector.MatchLabels, tree.pods))
 	}
 
 	for _, o := range jobs.Items {
 		o := o
-		tree.Controllers = append(tree.Controllers, newJobCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
+		tree.Controllers = append(tree.Controllers, newGenericCtrl(&o, CategoryJob, o.Spec.Selector.MatchLabels, tree.pods))
 	}
 
 	for _, o := range cronjobs.Items {
 		o := o
-		tree.Controllers = append(tree.Controllers, newCronJobCtrl(&o, tree.Controllers, tree.pods))
+		tree.Controllers = append(tree.Controllers, newInheritCtrl(&o, CategoryCronJob, tree))
 	}
 
 	for _, o := range services.Items {
 		o := o
-		tree.Controllers = append(tree.Controllers, newServiceCtrl(&o, o.Spec.Selector, tree.pods))
+		tree.Controllers = append(tree.Controllers, newGenericCtrl(&o, CategoryService, o.Spec.Selector, tree.pods))
 	}
 
 	return tree, nil
