@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -28,9 +29,11 @@ func (e UnsupportedObjectError) Error() string {
 	return fmt.Sprintf("Object '%s' not supported", e.TypeName)
 }
 
+type Pods []*cv1.Pod
+
 type PodManager interface {
-	Pods() []*cv1.Pod
-	SetPods([]*cv1.Pod)
+	Pods() Pods
+	SetPods(Pods)
 }
 
 type ObjectMetaGetter interface {
@@ -61,6 +64,89 @@ func (c Controllers) DeepCopy() Controllers {
 	return dst
 }
 
+type Ctrl struct {
+	ObjectMetaGetter
+	Category string
+
+	selector Selector
+	pods     Pods
+}
+
+func newStatefulSetCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
+	return &Ctrl{o, "Stateful Sets", selector, matchPods(allPods, selector)}
+}
+
+func newDeploymentCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
+	return &Ctrl{o, "Deployments", selector, matchPods(allPods, selector)}
+}
+
+func newDaemonSetCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
+	return &Ctrl{o, "Daemon Sets", selector, matchPods(allPods, selector)}
+}
+
+func newJobCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
+	return &Ctrl{o, "Jobs", selector, matchPods(allPods, selector)}
+}
+
+func newCronJobCtrl(o ObjectMetaGetter, jobs []Controller, allPods Pods) *Ctrl {
+	selector := Selector{}
+	for _, j := range jobs {
+		for _, owner := range j.GetObjectMeta().GetOwnerReferences() {
+			if owner.UID == o.GetObjectMeta().GetUID() {
+				for k, v := range j.Selector() {
+					selector[k] = v
+				}
+			}
+		}
+	}
+	return &Ctrl{o, "Cron Jobs", selector, matchPods(allPods, selector)}
+}
+
+func newServiceCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
+	return &Ctrl{o, "Services", selector, matchPods(allPods, selector)}
+}
+
+func (c *Ctrl) Controller() ObjectMetaGetter {
+	return c.ObjectMetaGetter
+}
+
+func (c *Ctrl) Pods() Pods {
+	return c.pods
+}
+
+func (c *Ctrl) SetPods(pods Pods) {
+	c.pods = pods
+}
+
+func (c *Ctrl) Selector() Selector {
+	return c.selector
+}
+
+func (c *Ctrl) DeepCopy() Controller {
+	dcV := reflect.ValueOf(c.ObjectMetaGetter).MethodByName("DeepCopy")
+
+	var cp ObjectMetaGetter
+	if dcV.IsValid() {
+		cpV := dcV.Call(nil)
+		if len(cpV) == 1 {
+			if v, ok := cpV[0].Interface().(ObjectMetaGetter); ok {
+				cp = v
+			}
+		}
+	}
+	if cp == nil {
+		cp = c.ObjectMetaGetter
+	}
+
+	dst := &Ctrl{
+		cp, c.Category,
+		c.selector, make(Pods, len(c.pods)),
+	}
+	copy(dst.pods, c.pods)
+
+	return dst
+}
+
 type PodTree struct {
 	StatefulSets Controllers
 	Deployments  Controllers
@@ -68,7 +154,7 @@ type PodTree struct {
 	Jobs         Controllers
 	CronJobs     Controllers
 	Services     Controllers
-	pods         []*cv1.Pod
+	pods         Pods
 }
 
 func (p PodTree) DeepCopy() PodTree {
@@ -79,242 +165,12 @@ func (p PodTree) DeepCopy() PodTree {
 		Jobs:         p.Jobs.DeepCopy(),
 		CronJobs:     p.CronJobs.DeepCopy(),
 		Services:     p.Services.DeepCopy(),
-		pods:         make([]*cv1.Pod, len(p.pods)),
+		pods:         make(Pods, len(p.pods)),
 	}
 
 	for i := range p.pods {
 		dst.pods[i] = p.pods[i].DeepCopy()
 	}
-
-	return dst
-}
-
-type StatefulSet struct {
-	av1.StatefulSet
-
-	pods []*cv1.Pod
-}
-
-func newStatefulSet(o av1.StatefulSet, allPods []*cv1.Pod) *StatefulSet {
-	return &StatefulSet{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
-}
-
-func (c *StatefulSet) Controller() ObjectMetaGetter {
-	return &c.StatefulSet
-}
-
-func (c *StatefulSet) Selector() Selector {
-	return c.Spec.Selector.MatchLabels
-}
-
-func (c *StatefulSet) Pods() []*cv1.Pod {
-	return c.pods
-}
-
-func (c *StatefulSet) SetPods(pods []*cv1.Pod) {
-	c.pods = pods
-}
-
-func (c *StatefulSet) DeepCopy() Controller {
-	dst := &StatefulSet{
-		*(c.StatefulSet.DeepCopy()),
-		make([]*cv1.Pod, len(c.pods)),
-	}
-	copy(dst.pods, c.pods)
-
-	return dst
-}
-
-type Deployment struct {
-	av1.Deployment
-
-	pods []*cv1.Pod
-}
-
-func newDeployment(o av1.Deployment, allPods []*cv1.Pod) *Deployment {
-	return &Deployment{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
-}
-
-func (c *Deployment) Controller() ObjectMetaGetter {
-	return &c.Deployment
-}
-
-func (c *Deployment) Selector() Selector {
-	return c.Spec.Selector.MatchLabels
-}
-
-func (c *Deployment) Pods() []*cv1.Pod {
-	return c.pods
-}
-
-func (c *Deployment) SetPods(pods []*cv1.Pod) {
-	c.pods = pods
-}
-
-func (c *Deployment) DeepCopy() Controller {
-	dst := &Deployment{
-		*(c.Deployment.DeepCopy()),
-		make([]*cv1.Pod, len(c.pods)),
-	}
-	copy(dst.pods, c.pods)
-
-	return dst
-}
-
-type DaemonSet struct {
-	av1.DaemonSet
-
-	pods []*cv1.Pod
-}
-
-func newDaemonSet(o av1.DaemonSet, allPods []*cv1.Pod) *DaemonSet {
-	return &DaemonSet{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
-}
-
-func (c *DaemonSet) Controller() ObjectMetaGetter {
-	return &c.DaemonSet
-}
-
-func (c *DaemonSet) Selector() Selector {
-	return c.Spec.Selector.MatchLabels
-}
-
-func (c *DaemonSet) Pods() []*cv1.Pod {
-	return c.pods
-}
-
-func (c *DaemonSet) SetPods(pods []*cv1.Pod) {
-	c.pods = pods
-}
-
-func (c *DaemonSet) DeepCopy() Controller {
-	dst := &DaemonSet{
-		*(c.DaemonSet.DeepCopy()),
-		make([]*cv1.Pod, len(c.pods)),
-	}
-	copy(dst.pods, c.pods)
-
-	return dst
-}
-
-type Job struct {
-	bv1.Job
-
-	pods []*cv1.Pod
-}
-
-func newJob(o bv1.Job, allPods []*cv1.Pod) *Job {
-	return &Job{o, matchPods(allPods, o.Spec.Selector.MatchLabels)}
-}
-
-func (c *Job) Pods() []*cv1.Pod {
-	return c.pods
-}
-
-func (c *Job) SetPods(pods []*cv1.Pod) {
-	c.pods = pods
-}
-
-func (c *Job) Controller() ObjectMetaGetter {
-	return &c.Job
-}
-
-func (c *Job) Selector() Selector {
-	return c.Spec.Selector.MatchLabels
-}
-
-func (c *Job) DeepCopy() Controller {
-	dst := &Job{
-		*(c.Job.DeepCopy()),
-		make([]*cv1.Pod, len(c.pods)),
-	}
-	copy(dst.pods, c.pods)
-
-	return dst
-}
-
-type CronJob struct {
-	bv1b1.CronJob
-
-	selector Selector
-	pods     []*cv1.Pod
-}
-
-func newCronJob(o bv1b1.CronJob, allPods []*cv1.Pod, jobs []Controller) *CronJob {
-	selector := Selector{}
-	for _, j := range jobs {
-		for _, owner := range j.GetObjectMeta().GetOwnerReferences() {
-			if owner.UID == o.GetUID() {
-				for k, v := range j.Selector() {
-					selector[k] = v
-				}
-			}
-		}
-	}
-
-	pods := matchPods(allPods, selector)
-	return &CronJob{o, selector, pods}
-}
-
-func (c *CronJob) Controller() ObjectMetaGetter {
-	return &c.CronJob
-}
-
-func (c *CronJob) Selector() Selector {
-	return c.selector
-}
-
-func (c *CronJob) Pods() []*cv1.Pod {
-	return c.pods
-}
-
-func (c *CronJob) SetPods(pods []*cv1.Pod) {
-	c.pods = pods
-}
-
-func (c *CronJob) DeepCopy() Controller {
-	dst := &CronJob{
-		*(c.CronJob.DeepCopy()),
-		c.selector,
-		make([]*cv1.Pod, len(c.pods)),
-	}
-	copy(dst.pods, c.pods)
-
-	return dst
-}
-
-type Service struct {
-	cv1.Service
-
-	pods []*cv1.Pod
-}
-
-func newService(o cv1.Service, allPods []*cv1.Pod) *Service {
-	return &Service{o, matchPods(allPods, o.Spec.Selector)}
-}
-
-func (c *Service) Controller() ObjectMetaGetter {
-	return &c.Service
-}
-
-func (c *Service) Selector() Selector {
-	return c.Spec.Selector
-}
-
-func (c *Service) Pods() []*cv1.Pod {
-	return c.pods
-}
-
-func (c *Service) SetPods(pods []*cv1.Pod) {
-	c.pods = pods
-}
-
-func (c *Service) DeepCopy() Controller {
-	dst := &Service{
-		*(c.Service.DeepCopy()),
-		make([]*cv1.Pod, len(c.pods)),
-	}
-	copy(dst.pods, c.pods)
 
 	return dst
 }
@@ -382,7 +238,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
-							return newStatefulSet(*o, tree.pods)
+							return newStatefulSetCtrl(o, o.Spec.Selector.MatchLabels, tree.pods)
 						}
 					}
 					tree.StatefulSets = modifyControllerList(
@@ -395,7 +251,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
-							return newDeployment(*o, tree.pods)
+							return newDeploymentCtrl(o, o.Spec.Selector.MatchLabels, tree.pods)
 						}
 					}
 					tree.Deployments = modifyControllerList(
@@ -408,7 +264,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
-							return newDaemonSet(*o, tree.pods)
+							return newDaemonSetCtrl(o, o.Spec.Selector.MatchLabels, tree.pods)
 						}
 					}
 					tree.DaemonSets = modifyControllerList(
@@ -421,7 +277,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
-							return newJob(*o, tree.pods)
+							return newJobCtrl(o, o.Spec.Selector.MatchLabels, tree.pods)
 						}
 					}
 					tree.Jobs = modifyControllerList(
@@ -434,7 +290,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
-							return newCronJob(*o, tree.pods, tree.Jobs)
+							return newCronJobCtrl(o, tree.Jobs, tree.pods)
 						}
 					}
 					tree.CronJobs = modifyControllerList(
@@ -447,7 +303,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
-							return newService(*o, tree.pods)
+							return newServiceCtrl(o, o.Spec.Selector, tree.pods)
 						}
 					}
 					tree.Services = modifyControllerList(
@@ -563,32 +419,38 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		return tree, err
 	}
 
-	tree.pods = make([]*cv1.Pod, len(pods.Items))
+	tree.pods = make(Pods, len(pods.Items))
 	for i := range pods.Items {
 		tree.pods[i] = &pods.Items[i]
 	}
 	for _, o := range statefulsets.Items {
-		tree.StatefulSets = append(tree.StatefulSets, newStatefulSet(o, tree.pods))
+		o := o
+		tree.StatefulSets = append(tree.StatefulSets, newStatefulSetCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
 	}
 
 	for _, o := range deployments.Items {
-		tree.Deployments = append(tree.Deployments, newDeployment(o, tree.pods))
+		o := o
+		tree.Deployments = append(tree.Deployments, newDeploymentCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
 	}
 
 	for _, o := range daemonsets.Items {
-		tree.DaemonSets = append(tree.DaemonSets, newDaemonSet(o, tree.pods))
+		o := o
+		tree.DaemonSets = append(tree.DaemonSets, newDaemonSetCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
 	}
 
 	for _, o := range jobs.Items {
-		tree.Jobs = append(tree.Jobs, newJob(o, tree.pods))
+		o := o
+		tree.Jobs = append(tree.Jobs, newJobCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
 	}
 
 	for _, o := range cronjobs.Items {
-		tree.CronJobs = append(tree.CronJobs, newCronJob(o, tree.pods, tree.Jobs))
+		o := o
+		tree.CronJobs = append(tree.CronJobs, newCronJobCtrl(&o, tree.Jobs, tree.pods))
 	}
 
 	for _, o := range services.Items {
-		tree.Services = append(tree.Services, newService(o, tree.pods))
+		o := o
+		tree.Services = append(tree.Services, newServiceCtrl(&o, o.Spec.Selector, tree.pods))
 	}
 
 	return tree, nil
@@ -608,78 +470,81 @@ func (c Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 		}
 
 		*v = *update
-	case *StatefulSet:
-		update := &av1.StatefulSet{}
+	case *Ctrl:
+		switch v.ObjectMetaGetter.(type) {
+		case *av1.StatefulSet:
+			update := &av1.StatefulSet{}
 
-		if err := json.Unmarshal(data, update); err != nil {
-			return xerrors.Errorf("unmarshaling data into stateful set: %w", err)
-		}
-		update, err := c.AppsV1().StatefulSets(v.GetNamespace()).Update(update)
-		if err != nil {
-			return xerrors.Errorf("updating stateful set %s: %w", update.GetName(), err)
-		}
+			if err := json.Unmarshal(data, update); err != nil {
+				return xerrors.Errorf("unmarshaling data into stateful set: %w", err)
+			}
+			update, err := c.AppsV1().StatefulSets(v.GetObjectMeta().GetNamespace()).Update(update)
+			if err != nil {
+				return xerrors.Errorf("updating stateful set %s: %w", update.GetName(), err)
+			}
 
-		v.StatefulSet = *update
-	case *Deployment:
-		update := &av1.Deployment{}
+			v.ObjectMetaGetter = update
+		case *av1.Deployment:
+			update := &av1.Deployment{}
 
-		if err := json.Unmarshal(data, update); err != nil {
-			return xerrors.Errorf("unmarshaling data into deployment: %w", err)
-		}
-		update, err := c.AppsV1().Deployments(v.GetNamespace()).Update(update)
-		if err != nil {
-			return xerrors.Errorf("updating deployment %s: %w", update.GetName(), err)
-		}
+			if err := json.Unmarshal(data, update); err != nil {
+				return xerrors.Errorf("unmarshaling data into deployment: %w", err)
+			}
+			update, err := c.AppsV1().Deployments(v.GetObjectMeta().GetNamespace()).Update(update)
+			if err != nil {
+				return xerrors.Errorf("updating deployment %s: %w", update.GetName(), err)
+			}
 
-		v.Deployment = *update
-	case *DaemonSet:
-		update := &av1.DaemonSet{}
+			v.ObjectMetaGetter = update
+		case *av1.DaemonSet:
+			update := &av1.DaemonSet{}
 
-		if err := json.Unmarshal(data, update); err != nil {
-			return xerrors.Errorf("unmarshaling data into daemon set: %w", err)
-		}
-		update, err := c.AppsV1().DaemonSets(v.GetNamespace()).Update(update)
-		if err != nil {
-			return xerrors.Errorf("updating daemon set %s: %w", update.GetName(), err)
-		}
+			if err := json.Unmarshal(data, update); err != nil {
+				return xerrors.Errorf("unmarshaling data into daemon set: %w", err)
+			}
+			update, err := c.AppsV1().DaemonSets(v.GetObjectMeta().GetNamespace()).Update(update)
+			if err != nil {
+				return xerrors.Errorf("updating daemon set %s: %w", update.GetName(), err)
+			}
 
-		v.DaemonSet = *update
-	case *Job:
-		update := &bv1.Job{}
+			v.ObjectMetaGetter = update
+		case *bv1.Job:
+			update := &bv1.Job{}
 
-		if err := json.Unmarshal(data, update); err != nil {
-			return xerrors.Errorf("unmarshaling data into job: %w", err)
-		}
-		update, err := c.BatchV1().Jobs(v.GetNamespace()).Update(update)
-		if err != nil {
-			return xerrors.Errorf("updating job %s: %w", update.GetName(), err)
-		}
+			if err := json.Unmarshal(data, update); err != nil {
+				return xerrors.Errorf("unmarshaling data into job: %w", err)
+			}
+			update, err := c.BatchV1().Jobs(v.GetObjectMeta().GetNamespace()).Update(update)
+			if err != nil {
+				return xerrors.Errorf("updating job %s: %w", update.GetName(), err)
+			}
 
-		v.Job = *update
-	case *CronJob:
-		update := &bv1b1.CronJob{}
+			v.ObjectMetaGetter = update
+		case *bv1b1.CronJob:
+			update := &bv1b1.CronJob{}
 
-		if err := json.Unmarshal(data, update); err != nil {
-			return xerrors.Errorf("unmarshaling data into cron job: %w", err)
-		}
-		update, err := c.BatchV1beta1().CronJobs(v.GetNamespace()).Update(update)
-		if err != nil {
-			return xerrors.Errorf("updating job %s: %w", update.GetName(), err)
-		}
+			if err := json.Unmarshal(data, update); err != nil {
+				return xerrors.Errorf("unmarshaling data into cron job: %w", err)
+			}
+			update, err := c.BatchV1beta1().CronJobs(v.GetObjectMeta().GetNamespace()).Update(update)
+			if err != nil {
+				return xerrors.Errorf("updating job %s: %w", update.GetName(), err)
+			}
 
-		v.CronJob = *update
-	case *Service:
-		update := &cv1.Service{}
+			v.ObjectMetaGetter = update
+		case *cv1.Service:
+			update := &cv1.Service{}
 
-		if err := json.Unmarshal(data, update); err != nil {
-			return xerrors.Errorf("unmarshaling data into service: %w", err)
-		}
-		update, err := c.CoreV1().Services(v.GetNamespace()).Update(update)
-		if err != nil {
-			return xerrors.Errorf("updating service %s: %w", update.GetName(), err)
-		}
+			if err := json.Unmarshal(data, update); err != nil {
+				return xerrors.Errorf("unmarshaling data into service: %w", err)
+			}
+			update, err := c.CoreV1().Services(v.GetObjectMeta().GetNamespace()).Update(update)
+			if err != nil {
+				return xerrors.Errorf("updating service %s: %w", update.GetName(), err)
+			}
 
-		v.Service = *update
+			v.ObjectMetaGetter = update
+		}
 	default:
 		typeName := strings.Split(fmt.Sprintf("%T", object), ".")[1]
 		return UnsupportedObjectError{TypeName: typeName}
@@ -720,11 +585,11 @@ func (c Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) err
 	return nil
 }
 
-func matchPods(pods []*cv1.Pod, selector map[string]string) []*cv1.Pod {
+func matchPods(pods Pods, selector map[string]string) Pods {
 	if len(selector) == 0 {
 		return nil
 	}
-	var matched []*cv1.Pod
+	var matched Pods
 	for i := range pods {
 		labels := pods[i].GetLabels()
 
@@ -798,7 +663,7 @@ func modifyPodInTree(tree *PodTree, pod *cv1.Pod, delete bool) {
 	}
 }
 
-func modifyPodInList(pods []*cv1.Pod, pod *cv1.Pod, delete bool, labels map[string]string, forceMatch bool) []*cv1.Pod {
+func modifyPodInList(pods Pods, pod *cv1.Pod, delete bool, labels map[string]string, forceMatch bool) Pods {
 	found := false
 	for idx, p := range pods {
 		if p.GetUID() == pod.GetUID() {
@@ -821,7 +686,7 @@ func modifyPodInList(pods []*cv1.Pod, pod *cv1.Pod, delete bool, labels map[stri
 				return pods[i].GetName() < pods[j].GetName()
 			})
 		} else {
-			selected := matchPods([]*cv1.Pod{pod}, labels)
+			selected := matchPods(Pods{pod}, labels)
 			if len(selected) > 0 {
 				pods = append(pods, pod)
 				sort.Slice(pods, func(i, j int) bool {

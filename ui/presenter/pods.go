@@ -394,7 +394,7 @@ func (p *Pods) initKeybindings() {
 				return nil
 			}
 		case tcell.KeyF7:
-			if d, ok := p.state.object.(*k8s.Deployment); ok {
+			if d, ok := p.state.object.(*k8s.Ctrl); ok && d.Category == "Deployments" {
 				go func() {
 					p.DisplayError(p.editor.scaleDeployment(d))
 				}()
@@ -460,7 +460,7 @@ func (p *Pods) setupButtons() {
 	if _, ok := p.state.object.(k8s.Controller); p.state.object != nil && !ok {
 		p.ui.ActionBar.AddAction(6, "Delete")
 	}
-	if _, ok := p.state.object.(*k8s.Deployment); ok {
+	if c, ok := p.state.object.(*k8s.Ctrl); ok && c.Category == "Deployments" {
 		p.ui.ActionBar.AddAction(7, "Scale")
 	}
 	p.mu.RLock()

@@ -22,6 +22,7 @@ import (
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
 	"golang.org/x/xerrors"
+	av1 "k8s.io/api/apps/v1"
 	kerrs "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/yaml"
 )
@@ -170,8 +171,11 @@ func (p *Editor) delete(object k8s.ObjectMetaGetter) error {
 	return nil
 }
 
-func (p *Editor) scaleDeployment(d *k8s.Deployment) (err error) {
-	replicas := int(*d.Spec.Replicas)
+func (p *Editor) scaleDeployment(c k8s.Controller) (err error) {
+	var replicas int
+	if d, ok := c.Controller().(*av1.Deployment); ok {
+		replicas = int(*d.Spec.Replicas)
+	}
 	newReplicas := replicas
 	done := make(chan struct{})
 
@@ -206,10 +210,10 @@ func (p *Editor) scaleDeployment(d *k8s.Deployment) (err error) {
 		return err
 	}
 
-	err = p.client.ScaleDeployment(d, newReplicas)
+	err = p.client.ScaleDeployment(c, newReplicas)
 	if err != nil {
 		return UserRetryableError{err, func() error {
-			return p.scaleDeployment(d)
+			return p.scaleDeployment(c)
 		}}
 	}
 
