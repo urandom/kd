@@ -166,25 +166,16 @@ func (p *Pods) populatePods(ns string) error {
 				}
 				p.ui.App.QueueUpdateDraw(func() {
 					podTree := podWatcherEvent.Tree
-					controllerNames := []string{"Stateful Sets", "Deployments", "Daemon Sets", "Jobs", "Cron Jobs", "Services"}
-					controllers := [][]k8s.Controller{{}, {}, {}, {}, {}, {}}
-					for _, c := range podTree.StatefulSets {
-						controllers[0] = append(controllers[0], c)
-					}
-					for _, c := range podTree.Deployments {
-						controllers[1] = append(controllers[1], c)
-					}
-					for _, c := range podTree.DaemonSets {
-						controllers[2] = append(controllers[2], c)
-					}
-					for _, c := range podTree.Jobs {
-						controllers[3] = append(controllers[3], c)
-					}
-					for _, c := range podTree.CronJobs {
-						controllers[4] = append(controllers[4], c)
-					}
-					for _, c := range podTree.Services {
-						controllers[5] = append(controllers[5], c)
+
+					controllers := [][]k8s.Controller{}
+					i := -1
+					for _, c := range podTree.Controllers {
+						if i == -1 || controllers[i][0].Category() != c.Category() {
+							i++
+							controllers = append(controllers, []k8s.Controller{})
+						}
+
+						controllers[i] = append(controllers[i], c)
 					}
 
 					log.Printf("Updating tree view with pods for namespaces %s", ns)
@@ -208,7 +199,7 @@ func (p *Pods) populatePods(ns string) error {
 
 						if clsNode == nil && len(c) > 0 {
 							// class not found, but category not empty
-							clsNode = tview.NewTreeNode(controllerNames[i]).
+							clsNode = tview.NewTreeNode(controllers[i][0].Category().Plural()).
 								SetSelectable(true).
 								SetColor(tcell.ColorCoral).
 								SetReference(i)
@@ -394,9 +385,9 @@ func (p *Pods) initKeybindings() {
 				return nil
 			}
 		case tcell.KeyF7:
-			if d, ok := p.state.object.(*k8s.Ctrl); ok && d.Category == "Deployments" {
+			if c, ok := p.state.object.(k8s.Controller); ok && c.Category() == k8s.CategoryDeployment {
 				go func() {
-					p.DisplayError(p.editor.scaleDeployment(d))
+					p.DisplayError(p.editor.scaleDeployment(c))
 				}()
 				return nil
 			}
@@ -460,7 +451,7 @@ func (p *Pods) setupButtons() {
 	if _, ok := p.state.object.(k8s.Controller); p.state.object != nil && !ok {
 		p.ui.ActionBar.AddAction(6, "Delete")
 	}
-	if c, ok := p.state.object.(*k8s.Ctrl); ok && c.Category == "Deployments" {
+	if c, ok := p.state.object.(k8s.Controller); ok && c.Category() == k8s.CategoryDeployment {
 		p.ui.ActionBar.AddAction(7, "Scale")
 	}
 	p.mu.RLock()

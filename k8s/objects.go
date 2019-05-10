@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"reflect"
 	"sort"
 	"strings"
@@ -44,10 +45,47 @@ type ObjectMetaGetter interface {
 type Selector map[string]string
 type ControllerFactory func() Controller
 
+type Category string
+
+const (
+	CategoryStatefulSet Category = "Stateful Set"
+	CategoryDeployment  Category = "Deployment"
+	CategoryDaemonSet   Category = "Daemon Set"
+	CategoryJob         Category = "Job"
+	CategoryCronJob     Category = "Cron Job"
+	CategoryService     Category = "Service"
+)
+
+func (c Category) Plural() string {
+	return string(c) + "s"
+}
+
+func (c Category) weight() int {
+	switch c {
+	case CategoryStatefulSet:
+		return 1
+	case CategoryDeployment:
+		return 2
+	case CategoryDaemonSet:
+		return 3
+	case CategoryJob:
+		return 4
+	case CategoryCronJob:
+		return 5
+	case CategoryService:
+		return 6
+	default:
+		hash := fnv.New32()
+		hash.Write([]byte(c))
+		return int(hash.Sum32())
+	}
+}
+
 type Controller interface {
 	PodManager
 	ObjectMetaGetter
 	Controller() ObjectMetaGetter
+	Category() Category
 	Selector() Selector
 	DeepCopy() Controller
 }
@@ -66,26 +104,26 @@ func (c Controllers) DeepCopy() Controllers {
 
 type Ctrl struct {
 	ObjectMetaGetter
-	Category string
+	category Category
 
 	selector Selector
 	pods     Pods
 }
 
 func newStatefulSetCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
-	return &Ctrl{o, "Stateful Sets", selector, matchPods(allPods, selector)}
+	return &Ctrl{o, CategoryStatefulSet, selector, matchPods(allPods, selector)}
 }
 
 func newDeploymentCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
-	return &Ctrl{o, "Deployments", selector, matchPods(allPods, selector)}
+	return &Ctrl{o, CategoryDeployment, selector, matchPods(allPods, selector)}
 }
 
 func newDaemonSetCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
-	return &Ctrl{o, "Daemon Sets", selector, matchPods(allPods, selector)}
+	return &Ctrl{o, CategoryDaemonSet, selector, matchPods(allPods, selector)}
 }
 
 func newJobCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
-	return &Ctrl{o, "Jobs", selector, matchPods(allPods, selector)}
+	return &Ctrl{o, CategoryJob, selector, matchPods(allPods, selector)}
 }
 
 func newCronJobCtrl(o ObjectMetaGetter, jobs []Controller, allPods Pods) *Ctrl {
@@ -99,15 +137,19 @@ func newCronJobCtrl(o ObjectMetaGetter, jobs []Controller, allPods Pods) *Ctrl {
 			}
 		}
 	}
-	return &Ctrl{o, "Cron Jobs", selector, matchPods(allPods, selector)}
+	return &Ctrl{o, CategoryCronJob, selector, matchPods(allPods, selector)}
 }
 
 func newServiceCtrl(o ObjectMetaGetter, selector Selector, allPods Pods) *Ctrl {
-	return &Ctrl{o, "Services", selector, matchPods(allPods, selector)}
+	return &Ctrl{o, CategoryService, selector, matchPods(allPods, selector)}
 }
 
 func (c *Ctrl) Controller() ObjectMetaGetter {
 	return c.ObjectMetaGetter
+}
+
+func (c *Ctrl) Category() Category {
+	return c.category
 }
 
 func (c *Ctrl) Pods() Pods {
@@ -139,7 +181,7 @@ func (c *Ctrl) DeepCopy() Controller {
 	}
 
 	dst := &Ctrl{
-		cp, c.Category,
+		cp, c.Category(),
 		c.selector, make(Pods, len(c.pods)),
 	}
 	copy(dst.pods, c.pods)
@@ -148,24 +190,14 @@ func (c *Ctrl) DeepCopy() Controller {
 }
 
 type PodTree struct {
-	StatefulSets Controllers
-	Deployments  Controllers
-	DaemonSets   Controllers
-	Jobs         Controllers
-	CronJobs     Controllers
-	Services     Controllers
-	pods         Pods
+	Controllers Controllers
+	pods        Pods
 }
 
 func (p PodTree) DeepCopy() PodTree {
 	dst := PodTree{
-		StatefulSets: p.StatefulSets.DeepCopy(),
-		Deployments:  p.Deployments.DeepCopy(),
-		DaemonSets:   p.DaemonSets.DeepCopy(),
-		Jobs:         p.Jobs.DeepCopy(),
-		CronJobs:     p.CronJobs.DeepCopy(),
-		Services:     p.Services.DeepCopy(),
-		pods:         make(Pods, len(p.pods)),
+		Controllers: p.Controllers.DeepCopy(),
+		pods:        make(Pods, len(p.pods)),
 	}
 
 	for i := range p.pods {
@@ -241,8 +273,8 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 							return newStatefulSetCtrl(o, o.Spec.Selector.MatchLabels, tree.pods)
 						}
 					}
-					tree.StatefulSets = modifyControllerList(
-						tree.StatefulSets, o, factory)
+					tree.Controllers = modifyControllerList(
+						tree.Controllers, o, factory)
 
 					ch <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 				}
@@ -254,8 +286,8 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 							return newDeploymentCtrl(o, o.Spec.Selector.MatchLabels, tree.pods)
 						}
 					}
-					tree.Deployments = modifyControllerList(
-						tree.Deployments, o, factory)
+					tree.Controllers = modifyControllerList(
+						tree.Controllers, o, factory)
 
 					ch <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 				}
@@ -267,8 +299,8 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 							return newDaemonSetCtrl(o, o.Spec.Selector.MatchLabels, tree.pods)
 						}
 					}
-					tree.DaemonSets = modifyControllerList(
-						tree.DaemonSets, o, factory)
+					tree.Controllers = modifyControllerList(
+						tree.Controllers, o, factory)
 
 					ch <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 				}
@@ -280,8 +312,8 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 							return newJobCtrl(o, o.Spec.Selector.MatchLabels, tree.pods)
 						}
 					}
-					tree.Jobs = modifyControllerList(
-						tree.Jobs, o, factory)
+					tree.Controllers = modifyControllerList(
+						tree.Controllers, o, factory)
 
 					ch <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 				}
@@ -290,11 +322,11 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 					var factory ControllerFactory
 					if ev.Type != watch.Deleted {
 						factory = func() Controller {
-							return newCronJobCtrl(o, tree.Jobs, tree.pods)
+							return newCronJobCtrl(o, tree.Controllers, tree.pods)
 						}
 					}
-					tree.CronJobs = modifyControllerList(
-						tree.CronJobs, o, factory)
+					tree.Controllers = modifyControllerList(
+						tree.Controllers, o, factory)
 
 					ch <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 				}
@@ -306,8 +338,8 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 							return newServiceCtrl(o, o.Spec.Selector, tree.pods)
 						}
 					}
-					tree.Services = modifyControllerList(
-						tree.Services, o, factory)
+					tree.Controllers = modifyControllerList(
+						tree.Controllers, o, factory)
 
 					ch <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 				}
@@ -425,32 +457,32 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 	}
 	for _, o := range statefulsets.Items {
 		o := o
-		tree.StatefulSets = append(tree.StatefulSets, newStatefulSetCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
+		tree.Controllers = append(tree.Controllers, newStatefulSetCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
 	}
 
 	for _, o := range deployments.Items {
 		o := o
-		tree.Deployments = append(tree.Deployments, newDeploymentCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
+		tree.Controllers = append(tree.Controllers, newDeploymentCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
 	}
 
 	for _, o := range daemonsets.Items {
 		o := o
-		tree.DaemonSets = append(tree.DaemonSets, newDaemonSetCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
+		tree.Controllers = append(tree.Controllers, newDaemonSetCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
 	}
 
 	for _, o := range jobs.Items {
 		o := o
-		tree.Jobs = append(tree.Jobs, newJobCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
+		tree.Controllers = append(tree.Controllers, newJobCtrl(&o, o.Spec.Selector.MatchLabels, tree.pods))
 	}
 
 	for _, o := range cronjobs.Items {
 		o := o
-		tree.CronJobs = append(tree.CronJobs, newCronJobCtrl(&o, tree.Jobs, tree.pods))
+		tree.Controllers = append(tree.Controllers, newCronJobCtrl(&o, tree.Controllers, tree.pods))
 	}
 
 	for _, o := range services.Items {
 		o := o
-		tree.Services = append(tree.Services, newServiceCtrl(&o, o.Spec.Selector, tree.pods))
+		tree.Controllers = append(tree.Controllers, newServiceCtrl(&o, o.Spec.Selector, tree.pods))
 	}
 
 	return tree, nil
@@ -614,51 +646,11 @@ func matchPods(pods Pods, selector map[string]string) Pods {
 func modifyPodInTree(tree *PodTree, pod *cv1.Pod, delete bool) {
 	tree.pods = modifyPodInList(tree.pods, pod, delete, nil, true)
 
-	for i := range tree.StatefulSets {
-		tree.StatefulSets[i].SetPods(
+	for i := range tree.Controllers {
+		tree.Controllers[i].SetPods(
 			modifyPodInList(
-				tree.StatefulSets[i].Pods(), pod, delete,
-				tree.StatefulSets[i].Selector(), false),
-		)
-	}
-
-	for i := range tree.Deployments {
-		tree.Deployments[i].SetPods(
-			modifyPodInList(
-				tree.Deployments[i].Pods(), pod, delete,
-				tree.Deployments[i].Selector(), false),
-		)
-	}
-
-	for i := range tree.DaemonSets {
-		tree.DaemonSets[i].SetPods(
-			modifyPodInList(
-				tree.DaemonSets[i].Pods(), pod, delete,
-				tree.DaemonSets[i].Selector(), false),
-		)
-	}
-
-	for i := range tree.Jobs {
-		tree.Jobs[i].SetPods(
-			modifyPodInList(
-				tree.Jobs[i].Pods(), pod, delete,
-				tree.Jobs[i].Selector(), false),
-		)
-	}
-
-	for i := range tree.CronJobs {
-		tree.CronJobs[i].SetPods(
-			modifyPodInList(
-				tree.CronJobs[i].Pods(), pod, delete,
-				tree.CronJobs[i].Selector(), false),
-		)
-	}
-
-	for i := range tree.Services {
-		tree.Services[i].SetPods(
-			modifyPodInList(
-				tree.Services[i].Pods(), pod, delete,
-				tree.Services[i].Selector(), false),
+				tree.Controllers[i].Pods(), pod, delete,
+				tree.Controllers[i].Selector(), false),
 		)
 	}
 }
@@ -718,7 +710,11 @@ func modifyControllerList(controllers []Controller, o ObjectMetaGetter, factory 
 	if !found && factory != nil {
 		controllers = append(controllers, factory())
 		sort.Slice(controllers, func(i, j int) bool {
-			return controllers[i].GetObjectMeta().GetName() < controllers[i].GetObjectMeta().GetName()
+			if controllers[i].Category().weight() == controllers[j].Category().weight() {
+				return controllers[i].GetObjectMeta().GetName() < controllers[j].GetObjectMeta().GetName()
+			}
+
+			return controllers[i].Category().weight() < controllers[j].Category().weight()
 		})
 	}
 
