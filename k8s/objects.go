@@ -47,11 +47,11 @@ type Selector map[string]string
 type ControllerFactory func(o ObjectMetaGetter, tree PodTree) Controller
 
 var (
-	factories = map[string]ControllerFactory{}
+	factories = map[ControllerType]ControllerFactory{}
 	mu        = sync.RWMutex{}
 )
 
-func RegisterControllerFactory(kind string, f ControllerFactory) {
+func RegisterControllerFactory(kind ControllerType, f ControllerFactory) {
 	mu.Lock()
 	factories[kind] = f
 	mu.Unlock()
@@ -92,6 +92,17 @@ func (c Category) weight() int {
 		return int(hash.Sum32())
 	}
 }
+
+type ControllerType string
+
+const (
+	StatefulSetType ControllerType = "StatefulSet"
+	DeploymentType  ControllerType = "Deployment"
+	DaemonSetType   ControllerType = "DaemonSet"
+	JobType         ControllerType = "Job"
+	CronJobType     ControllerType = "CronJob"
+	ServiceType     ControllerType = "Service"
+)
 
 type Controller interface {
 	PodManager
@@ -361,32 +372,32 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 
 	mu.RLock()
 	defer mu.RUnlock()
-	factory := factories["StatefulSet"]
+	factory := factories[StatefulSetType]
 	for i := range statefulsets.Items {
 		tree.Controllers = append(tree.Controllers, factory(&statefulsets.Items[i], tree))
 	}
 
-	factory = factories["Deployment"]
+	factory = factories[DeploymentType]
 	for i := range deployments.Items {
 		tree.Controllers = append(tree.Controllers, factory(&deployments.Items[i], tree))
 	}
 
-	factory = factories["DaemonSet"]
+	factory = factories[DaemonSetType]
 	for i := range daemonsets.Items {
 		tree.Controllers = append(tree.Controllers, factory(&daemonsets.Items[i], tree))
 	}
 
-	factory = factories["Job"]
+	factory = factories[JobType]
 	for i := range jobs.Items {
 		tree.Controllers = append(tree.Controllers, factory(&jobs.Items[i], tree))
 	}
 
-	factory = factories["CronJob"]
+	factory = factories[CronJobType]
 	for i := range cronjobs.Items {
 		tree.Controllers = append(tree.Controllers, factory(&cronjobs.Items[i], tree))
 	}
 
-	factory = factories["Service"]
+	factory = factories[ServiceType]
 	for i := range services.Items {
 		tree.Controllers = append(tree.Controllers, factory(&services.Items[i], tree))
 	}
@@ -667,7 +678,7 @@ func selectFromWatchers(
 				var factory ControllerFactory
 
 				mu.RLock()
-				factory = factories[typeName]
+				factory = factories[ControllerType(typeName)]
 				mu.RUnlock()
 
 				tree.Controllers = modifyControllerList(tree.Controllers, o,
@@ -682,7 +693,7 @@ func selectFromWatchers(
 }
 
 func init() {
-	RegisterControllerFactory("StatefulSet", func(o ObjectMetaGetter, tree PodTree) Controller {
+	RegisterControllerFactory(StatefulSetType, func(o ObjectMetaGetter, tree PodTree) Controller {
 		if o, ok := o.(*av1.StatefulSet); ok {
 			return newGenericCtrl(o, CategoryStatefulSet, o.Spec.Selector.MatchLabels, tree.pods)
 		}
@@ -690,7 +701,7 @@ func init() {
 		return nil
 	})
 
-	RegisterControllerFactory("Deployment", func(o ObjectMetaGetter, tree PodTree) Controller {
+	RegisterControllerFactory(DeploymentType, func(o ObjectMetaGetter, tree PodTree) Controller {
 		if o, ok := o.(*av1.Deployment); ok {
 			return newGenericCtrl(o, CategoryDeployment, o.Spec.Selector.MatchLabels, tree.pods)
 		}
@@ -698,7 +709,7 @@ func init() {
 		return nil
 	})
 
-	RegisterControllerFactory("DaemonSet", func(o ObjectMetaGetter, tree PodTree) Controller {
+	RegisterControllerFactory(DaemonSetType, func(o ObjectMetaGetter, tree PodTree) Controller {
 		if o, ok := o.(*av1.DaemonSet); ok {
 			return newGenericCtrl(o, CategoryDaemonSet, o.Spec.Selector.MatchLabels, tree.pods)
 		}
@@ -706,7 +717,7 @@ func init() {
 		return nil
 	})
 
-	RegisterControllerFactory("Job", func(o ObjectMetaGetter, tree PodTree) Controller {
+	RegisterControllerFactory(JobType, func(o ObjectMetaGetter, tree PodTree) Controller {
 		if o, ok := o.(*bv1.Job); ok {
 			return newGenericCtrl(o, CategoryJob, o.Spec.Selector.MatchLabels, tree.pods)
 		}
@@ -714,7 +725,7 @@ func init() {
 		return nil
 	})
 
-	RegisterControllerFactory("CronJob", func(o ObjectMetaGetter, tree PodTree) Controller {
+	RegisterControllerFactory(CronJobType, func(o ObjectMetaGetter, tree PodTree) Controller {
 		if o, ok := o.(*bv1b1.CronJob); ok {
 			return newInheritCtrl(o, CategoryCronJob, tree)
 		}
@@ -722,7 +733,7 @@ func init() {
 		return nil
 	})
 
-	RegisterControllerFactory("Service", func(o ObjectMetaGetter, tree PodTree) Controller {
+	RegisterControllerFactory(ServiceType, func(o ObjectMetaGetter, tree PodTree) Controller {
 		if o, ok := o.(*cv1.Service); ok {
 			return newGenericCtrl(o, CategoryService, o.Spec.Selector, tree.pods)
 		}
