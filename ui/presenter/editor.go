@@ -29,14 +29,14 @@ import (
 
 type Editor struct {
 	ui           *ui.UI
-	client       k8s.Client
+	client       *k8s.Client
 	confirm      Confirm
 	form         Form
 	mu           sync.RWMutex
 	actionGroups map[string]map[ext.ObjectMutateAction]ext.ObjectMutateActionFunc
 }
 
-func NewEditor(ui *ui.UI, client k8s.Client) *Editor {
+func NewEditor(ui *ui.UI, client *k8s.Client) *Editor {
 	return &Editor{
 		ui:           ui,
 		client:       client,

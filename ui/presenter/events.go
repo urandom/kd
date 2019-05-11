@@ -15,10 +15,10 @@ import (
 
 type Events struct {
 	ui     *ui.UI
-	client k8s.Client
+	client *k8s.Client
 }
 
-func NewEvents(ui *ui.UI, client k8s.Client) *Events {
+func NewEvents(ui *ui.UI, client *k8s.Client) *Events {
 	return &Events{
 		ui:     ui,
 		client: client,

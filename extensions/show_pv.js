@@ -11,7 +11,7 @@
                 return null
             }
 
-            return {"label": "Persistent Volume", "cb": this.actionCallback.bind(this)}
+            return {"Label": "Persistent Volume", "Callback": this.actionCallback.bind(this)}
         }
 
         return null

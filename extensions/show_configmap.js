@@ -21,7 +21,7 @@
 
         this.namespace = obj.Namespace
 
-        return {"label": "Config map", "cb": this.actionCallback.bind(this)}
+        return {"Label": "Config map", "Callback": this.actionCallback.bind(this)}
     }
 
     ConfigMap.prototype.actionCallback = function() {

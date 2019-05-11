@@ -133,11 +133,11 @@ type Ctrl struct {
 	pods     Pods
 }
 
-func newGenericCtrl(o ObjectMetaGetter, category Category, selector Selector, allPods Pods) *Ctrl {
+func NewGenericCtrl(o ObjectMetaGetter, category Category, selector Selector, allPods Pods) *Ctrl {
 	return &Ctrl{o, category, selector, matchPods(allPods, selector)}
 }
 
-func newInheritCtrl(o ObjectMetaGetter, category Category, tree PodTree) *Ctrl {
+func NewInheritCtrl(o ObjectMetaGetter, category Category, tree PodTree) *Ctrl {
 	selector := Selector{}
 	for _, c := range tree.Controllers {
 		for _, owner := range c.GetObjectMeta().GetOwnerReferences() {
@@ -219,7 +219,7 @@ type PodWatcherEvent struct {
 	EventType watch.EventType
 }
 
-func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWatcherEvent, error) {
+func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWatcherEvent, error) {
 	core := c.CoreV1()
 	apps := c.AppsV1()
 	batch := c.BatchV1()
@@ -293,7 +293,7 @@ func (c Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWa
 	return window, nil
 }
 
-func (c Client) PodTree(nsName string) (PodTree, error) {
+func (c *Client) PodTree(nsName string) (PodTree, error) {
 	core := c.CoreV1()
 	apps := c.AppsV1()
 	batch := c.BatchV1()
@@ -405,7 +405,7 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 	return tree, nil
 }
 
-func (c Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
+func (c *Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 	switch v := object.(type) {
 	case *cv1.Pod:
 		update := &cv1.Pod{}
@@ -502,7 +502,7 @@ func (c Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 	return nil
 }
 
-func (c Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) error {
+func (c *Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) error {
 	propagation := meta.DeletePropagationForeground
 	switch v := object.(type) {
 	case *cv1.Pod:
@@ -695,7 +695,7 @@ func selectFromWatchers(
 func init() {
 	RegisterControllerFactory(StatefulSetType, func(o ObjectMetaGetter, tree PodTree) Controller {
 		if o, ok := o.(*av1.StatefulSet); ok {
-			return newGenericCtrl(o, CategoryStatefulSet, o.Spec.Selector.MatchLabels, tree.pods)
+			return NewGenericCtrl(o, CategoryStatefulSet, o.Spec.Selector.MatchLabels, tree.pods)
 		}
 
 		return nil
@@ -703,7 +703,7 @@ func init() {
 
 	RegisterControllerFactory(DeploymentType, func(o ObjectMetaGetter, tree PodTree) Controller {
 		if o, ok := o.(*av1.Deployment); ok {
-			return newGenericCtrl(o, CategoryDeployment, o.Spec.Selector.MatchLabels, tree.pods)
+			return NewGenericCtrl(o, CategoryDeployment, o.Spec.Selector.MatchLabels, tree.pods)
 		}
 
 		return nil
@@ -711,7 +711,7 @@ func init() {
 
 	RegisterControllerFactory(DaemonSetType, func(o ObjectMetaGetter, tree PodTree) Controller {
 		if o, ok := o.(*av1.DaemonSet); ok {
-			return newGenericCtrl(o, CategoryDaemonSet, o.Spec.Selector.MatchLabels, tree.pods)
+			return NewGenericCtrl(o, CategoryDaemonSet, o.Spec.Selector.MatchLabels, tree.pods)
 		}
 
 		return nil
@@ -719,7 +719,7 @@ func init() {
 
 	RegisterControllerFactory(JobType, func(o ObjectMetaGetter, tree PodTree) Controller {
 		if o, ok := o.(*bv1.Job); ok {
-			return newGenericCtrl(o, CategoryJob, o.Spec.Selector.MatchLabels, tree.pods)
+			return NewGenericCtrl(o, CategoryJob, o.Spec.Selector.MatchLabels, tree.pods)
 		}
 
 		return nil
@@ -727,7 +727,7 @@ func init() {
 
 	RegisterControllerFactory(CronJobType, func(o ObjectMetaGetter, tree PodTree) Controller {
 		if o, ok := o.(*bv1b1.CronJob); ok {
-			return newInheritCtrl(o, CategoryCronJob, tree)
+			return NewInheritCtrl(o, CategoryCronJob, tree)
 		}
 
 		return nil
@@ -735,7 +735,7 @@ func init() {
 
 	RegisterControllerFactory(ServiceType, func(o ObjectMetaGetter, tree PodTree) Controller {
 		if o, ok := o.(*cv1.Service); ok {
-			return newGenericCtrl(o, CategoryService, o.Spec.Selector, tree.pods)
+			return NewGenericCtrl(o, CategoryService, o.Spec.Selector, tree.pods)
 		}
 
 		return nil

@@ -7,7 +7,7 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (c Client) ScaleDeployment(o Controller, replicas int) error {
+func (c *Client) ScaleDeployment(o Controller, replicas int) error {
 	name := o.GetObjectMeta().GetName()
 	if _, ok := o.Controller().(*av1.Deployment); !ok {
 		return xerrors.Errorf("controller %s not a deployment", name)

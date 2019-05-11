@@ -15,10 +15,10 @@ import (
 type Log struct {
 	picker Picker
 	ui     *ui.UI
-	client k8s.Client
+	client *k8s.Client
 }
 
-func NewLog(ui *ui.UI, client k8s.Client) *Log {
+func NewLog(ui *ui.UI, client *k8s.Client) *Log {
 	return &Log{
 		picker: NewPicker(ui),
 		ui:     ui,

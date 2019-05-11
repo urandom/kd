@@ -20,7 +20,7 @@ type UserRetryableError struct {
 	RetryOp func() error
 }
 
-type ClientFactory func() (k8s.Client, error)
+type ClientFactory func() (*k8s.Client, error)
 
 type Modal struct {
 	ui *ui.UI
@@ -187,7 +187,7 @@ type Main struct {
 	clientFactory ClientFactory
 	extManager    ext.Manager
 
-	client k8s.Client
+	client *k8s.Client
 	Pods   *Pods
 }
 

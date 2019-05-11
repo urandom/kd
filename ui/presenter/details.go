@@ -21,12 +21,12 @@ import (
 
 type Details struct {
 	ui        *ui.UI
-	client    k8s.Client
+	client    *k8s.Client
 	mu        sync.RWMutex
 	summaries map[string]ext.ObjectSummaryProvider
 }
 
-func NewDetails(ui *ui.UI, client k8s.Client) *Details {
+func NewDetails(ui *ui.UI, client *k8s.Client) *Details {
 	return &Details{
 		ui:        ui,
 		client:    client,

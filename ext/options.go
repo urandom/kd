@@ -46,7 +46,7 @@ type RegisterObjectSummaryProviderFunc func(
 )
 
 type options struct {
-	client                            k8s.Client
+	client                            *k8s.Client
 	displayTextFunc                   DisplayTextFunc
 	displayObjectFunc                 DisplayObjectFunc
 	pickFromFunc                      PickFromFunc
@@ -55,7 +55,7 @@ type options struct {
 	registerObjectSummaryProviderFunc RegisterObjectSummaryProviderFunc
 }
 
-func Client(c k8s.Client) Option {
+func Client(c *k8s.Client) Option {
 	return Option{func(o *options) {
 		o.client = c
 	}}

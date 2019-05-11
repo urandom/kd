@@ -44,7 +44,7 @@ func main() {
 		log.Fatal(err)
 	}
 	manager := ext.NewManager(loader)
-	p := presenter.NewMain(ui.New(), manager, func() (k8s.Client, error) { return k8s.New(*configF) })
+	p := presenter.NewMain(ui.New(), manager, func() (*k8s.Client, error) { return k8s.New(*configF) })
 
 	if err := p.Run(); err != nil {
 		fmt.Fprint(os.Stderr, err)

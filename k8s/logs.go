@@ -30,7 +30,7 @@ type logData struct {
 
 const previousPrefix = "previous:"
 
-func (c Client) Logs(ctx context.Context, object ObjectMetaGetter, container string, colors []string) (<-chan []byte, error) {
+func (c *Client) Logs(ctx context.Context, object ObjectMetaGetter, container string, colors []string) (<-chan []byte, error) {
 	var pods []*cv1.Pod
 
 	switch v := object.(type) {

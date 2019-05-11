@@ -19,7 +19,7 @@
 
             this.namespace = obj.Namespace
 
-            return {"label": "Persistent Volume Claims", "cb": this.actionCallback.bind(this)}
+            return {"Label": "Persistent Volume Claims", "Callback": this.actionCallback.bind(this)}
         }
 
         return null

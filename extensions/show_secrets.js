@@ -20,7 +20,7 @@
 
             this.namespace = obj.Namespace
 
-            return {"label": "Secret", "cb": this.actionCallback.bind(this)}
+            return {"Label": "Secret", "Callback": this.actionCallback.bind(this)}
         } else if (sprintf("%T", obj).split(".")[1] == "Secret") {
             this.secrets = obj.Data
 
@@ -28,7 +28,7 @@
                 return null
             }
 
-            return {"label": "Secret data", "cb": this.secretKeysActionCallback.bind(this)}
+            return {"Label": "Secret data", "Callback": this.secretKeysActionCallback.bind(this)}
         }
 
         return null

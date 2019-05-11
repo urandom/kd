@@ -18,7 +18,7 @@ type runtime struct {
 }
 
 func (rt *runtime) RegisterActionOnObjectSelected(
-	cb func(goja.FunctionCall) goja.Value,
+	cb func(k8s.ObjectMetaGetter) (ObjectSelectedData, error),
 ) {
 	if rt.options.registerObjectSelectActionFunc == nil {
 		return
@@ -32,41 +32,18 @@ func (rt *runtime) RegisterActionOnObjectSelected(
 		payloadC := make(chan payload)
 
 		rt.ops <- func() {
-			var err error
-			defer func() {
-				if r := recover(); r != nil {
-					err = xerrors.Errorf("js error on object selected registration: %v", r)
-					payloadC <- payload{err: err}
-				}
-			}()
+			data, err := cb(obj)
+			if data.Callback != nil {
+				cb := data.Callback
+				data.Callback = func() (err error) {
+					errC := make(chan error)
 
-			val := cb(goja.FunctionCall{Arguments: []goja.Value{rt.vm.ToValue(obj)}})
-			data := ObjectSelectedData{}
-			if m, ok := val.Export().(map[string]interface{}); ok {
-				if rawCB, ok := m["cb"].(func(goja.FunctionCall) goja.Value); ok {
-					data.Callback = func() (err error) {
-						errC := make(chan error)
-
-						rt.ops <- func() {
-							defer func() {
-								if r := recover(); r == nil {
-									errC <- nil
-								} else {
-									errC <- xerrors.Errorf("js error on object selected callback: %v", r)
-								}
-							}()
-
-							rawCB(goja.FunctionCall{})
-						}
-
-						return <-errC
+					rt.ops <- func() {
+						errC <- cb()
 					}
-				}
 
-				if label, ok := m["label"].(string); ok {
-					data.Label = label
+					return <-errC
 				}
-
 			}
 
 			payloadC <- payload{data, err}
@@ -79,7 +56,7 @@ func (rt *runtime) RegisterActionOnObjectSelected(
 	rt.options.registerObjectSelectActionFunc(normalized)
 }
 
-func (rt *runtime) RegisterObjectMutateActions(typeName string, actions map[string]func(goja.FunctionCall) goja.Value) {
+func (rt *runtime) RegisterObjectMutateActions(typeName string, actions map[string]ObjectMutateActionFunc) {
 	if rt.options.registerObjectMutateActionsFunc == nil {
 		return
 	}
@@ -101,15 +78,7 @@ func (rt *runtime) RegisterObjectMutateActions(typeName string, actions map[stri
 			errC := make(chan error)
 
 			rt.ops <- func() {
-				defer func() {
-					if r := recover(); r != nil {
-						errC <- xerrors.Errorf("js error on mutate action %s: %v", nAction, r)
-					} else {
-						errC <- nil
-					}
-				}()
-
-				fn(goja.FunctionCall{Arguments: []goja.Value{rt.vm.ToValue(obj)}})
+				errC <- fn(obj)
 			}
 
 			return <-errC
@@ -121,7 +90,7 @@ func (rt *runtime) RegisterObjectMutateActions(typeName string, actions map[stri
 	rt.options.registerObjectMutateActionsFunc(typeName, normalized)
 }
 
-func (rt *runtime) RegisterObjectSummaryProvider(typeName string, provider func(goja.FunctionCall) goja.Value) {
+func (rt *runtime) RegisterObjectSummaryProvider(typeName string, provider func(k8s.ObjectMetaGetter) (string, error)) {
 	if rt.options.registerObjectSummaryProviderFunc == nil {
 		return
 	}
@@ -134,14 +103,8 @@ func (rt *runtime) RegisterObjectSummaryProvider(typeName string, provider func(
 		payloadC := make(chan payload)
 
 		rt.ops <- func() {
-			defer func() {
-				if r := recover(); r != nil {
-					payloadC <- payload{err: xerrors.Errorf("js error on summary provision: %v", r)}
-				}
-			}()
-
-			val := provider(goja.FunctionCall{Arguments: []goja.Value{rt.vm.ToValue(obj)}})
-			payloadC <- payload{data: val.String()}
+			val, err := provider(obj)
+			payloadC <- payload{data: val, err: err}
 		}
 
 		p := <-payloadC
@@ -151,7 +114,10 @@ func (rt *runtime) RegisterObjectSummaryProvider(typeName string, provider func(
 	rt.options.registerObjectSummaryProviderFunc(typeName, normalized)
 }
 
-func (rt *runtime) Client() k8s.Client {
+func (rt *runtime) RegisterControllerFactory(typeName k8s.ControllerType, provider func(k8s.ObjectMetaGetter, k8s.PodTree) k8s.Controller) {
+}
+
+func (rt *runtime) Client() *k8s.Client {
 	return rt.options.client
 }
 

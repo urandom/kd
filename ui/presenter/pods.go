@@ -40,7 +40,7 @@ type Pods struct {
 	log     *Log
 	editor  *Editor
 
-	client k8s.Client
+	client *k8s.Client
 	state  struct {
 		activeComponent podsComponent
 		namespace       string
@@ -56,7 +56,7 @@ type Pods struct {
 	mu sync.RWMutex
 }
 
-func NewPods(ui *ui.UI, client k8s.Client, extManager ext.Manager) *Pods {
+func NewPods(ui *ui.UI, client *k8s.Client, extManager ext.Manager) *Pods {
 	p := &Pods{
 		Error:   NewError(ui),
 		picker:  NewPicker(ui),
