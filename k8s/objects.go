@@ -312,7 +312,7 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 		if statefulsets, err = apps.StatefulSets(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of stateful sets for ns %s: %w", nsName, err)
 		}
-		return err
+		return nil
 	})
 
 	g.Go(func() (err error) {
@@ -358,34 +358,37 @@ func (c Client) PodTree(nsName string) (PodTree, error) {
 	for i := range pods.Items {
 		tree.pods[i] = &pods.Items[i]
 	}
-	for _, o := range statefulsets.Items {
-		o := o
-		tree.Controllers = append(tree.Controllers, newGenericCtrl(&o, CategoryStatefulSet, o.Spec.Selector.MatchLabels, tree.pods))
+
+	mu.RLock()
+	defer mu.RUnlock()
+	factory := factories["StatefulSet"]
+	for i := range statefulsets.Items {
+		tree.Controllers = append(tree.Controllers, factory(&statefulsets.Items[i], tree))
 	}
 
-	for _, o := range deployments.Items {
-		o := o
-		tree.Controllers = append(tree.Controllers, newGenericCtrl(&o, CategoryDeployment, o.Spec.Selector.MatchLabels, tree.pods))
+	factory = factories["Deployment"]
+	for i := range deployments.Items {
+		tree.Controllers = append(tree.Controllers, factory(&deployments.Items[i], tree))
 	}
 
-	for _, o := range daemonsets.Items {
-		o := o
-		tree.Controllers = append(tree.Controllers, newGenericCtrl(&o, CategoryDaemonSet, o.Spec.Selector.MatchLabels, tree.pods))
+	factory = factories["DaemonSet"]
+	for i := range daemonsets.Items {
+		tree.Controllers = append(tree.Controllers, factory(&daemonsets.Items[i], tree))
 	}
 
-	for _, o := range jobs.Items {
-		o := o
-		tree.Controllers = append(tree.Controllers, newGenericCtrl(&o, CategoryJob, o.Spec.Selector.MatchLabels, tree.pods))
+	factory = factories["Job"]
+	for i := range jobs.Items {
+		tree.Controllers = append(tree.Controllers, factory(&jobs.Items[i], tree))
 	}
 
-	for _, o := range cronjobs.Items {
-		o := o
-		tree.Controllers = append(tree.Controllers, newInheritCtrl(&o, CategoryCronJob, tree))
+	factory = factories["CronJob"]
+	for i := range cronjobs.Items {
+		tree.Controllers = append(tree.Controllers, factory(&cronjobs.Items[i], tree))
 	}
 
-	for _, o := range services.Items {
-		o := o
-		tree.Controllers = append(tree.Controllers, newGenericCtrl(&o, CategoryService, o.Spec.Selector, tree.pods))
+	factory = factories["Service"]
+	for i := range services.Items {
+		tree.Controllers = append(tree.Controllers, factory(&services.Items[i], tree))
 	}
 
 	return tree, nil
