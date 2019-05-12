@@ -26,19 +26,6 @@ type RegisterObjectSelectActionFunc func(
 	callback ObjectSelectedAction,
 )
 
-type ObjectMutateAction string
-
-const (
-	MutateUpdate ObjectMutateAction = "update"
-	MutateDelete ObjectMutateAction = "delete"
-)
-
-type ObjectMutateActionFunc func(obj k8s.ObjectMetaGetter) error
-type RegisterObjectMutateActionsFunc func(
-	typeName string,
-	actions map[ObjectMutateAction]ObjectMutateActionFunc,
-)
-
 type ObjectSummaryProvider func(k8s.ObjectMetaGetter) (string, error)
 type RegisterObjectSummaryProviderFunc func(
 	typeName string,
@@ -51,7 +38,6 @@ type options struct {
 	displayObjectFunc                 DisplayObjectFunc
 	pickFromFunc                      PickFromFunc
 	registerObjectSelectActionFunc    RegisterObjectSelectActionFunc
-	registerObjectMutateActionsFunc   RegisterObjectMutateActionsFunc
 	registerObjectSummaryProviderFunc RegisterObjectSummaryProviderFunc
 }
 
@@ -82,12 +68,6 @@ func PickFrom(f PickFromFunc) Option {
 func RegisterObjectSelectAction(f RegisterObjectSelectActionFunc) Option {
 	return Option{func(o *options) {
 		o.registerObjectSelectActionFunc = f
-	}}
-}
-
-func RegisterObjectMutateActions(f RegisterObjectMutateActionsFunc) Option {
-	return Option{func(o *options) {
-		o.registerObjectMutateActionsFunc = f
 	}}
 }
 

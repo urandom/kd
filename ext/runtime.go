@@ -56,40 +56,6 @@ func (rt *runtime) RegisterActionOnObjectSelected(
 	rt.options.registerObjectSelectActionFunc(normalized)
 }
 
-func (rt *runtime) RegisterObjectMutateActions(typeName string, actions map[string]ObjectMutateActionFunc) {
-	if rt.options.registerObjectMutateActionsFunc == nil {
-		return
-	}
-
-	normalized := map[ObjectMutateAction]ObjectMutateActionFunc{}
-
-	for action, fn := range actions {
-		var nAction ObjectMutateAction
-
-		if action == string(MutateUpdate) {
-			nAction = MutateUpdate
-		} else if action == string(MutateDelete) {
-			nAction = MutateDelete
-		} else {
-			continue
-		}
-
-		nFn := func(obj k8s.ObjectMetaGetter) error {
-			errC := make(chan error)
-
-			rt.ops <- func() {
-				errC <- fn(obj)
-			}
-
-			return <-errC
-		}
-
-		normalized[nAction] = nFn
-	}
-
-	rt.options.registerObjectMutateActionsFunc(typeName, normalized)
-}
-
 func (rt *runtime) RegisterObjectSummaryProvider(typeName string, provider func(k8s.ObjectMetaGetter) (string, error)) {
 	if rt.options.registerObjectSummaryProviderFunc == nil {
 		return
@@ -114,7 +80,7 @@ func (rt *runtime) RegisterObjectSummaryProvider(typeName string, provider func(
 	rt.options.registerObjectSummaryProviderFunc(typeName, normalized)
 }
 
-func (rt *runtime) RegisterControllerFactory(typeName k8s.ControllerType, op k8s.ControllerOperator) {
+func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op k8s.ControllerOperator) {
 	rt.Client().RegisterControllerOperator(typeName, op)
 }
 

@@ -3,22 +3,18 @@ package presenter
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/signal"
-	"reflect"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 	"unicode"
 
 	"github.com/rivo/tview"
-	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
 	"golang.org/x/xerrors"
@@ -28,34 +24,25 @@ import (
 )
 
 type Editor struct {
-	ui           *ui.UI
-	client       *k8s.Client
-	confirm      Confirm
-	form         Form
-	mu           sync.RWMutex
-	actionGroups map[string]map[ext.ObjectMutateAction]ext.ObjectMutateActionFunc
+	ui      *ui.UI
+	client  *k8s.Client
+	confirm Confirm
+	form    Form
 }
 
 func NewEditor(ui *ui.UI, client *k8s.Client) *Editor {
 	return &Editor{
-		ui:           ui,
-		client:       client,
-		confirm:      NewConfirm(ui),
-		form:         NewForm(ui),
-		actionGroups: map[string]map[ext.ObjectMutateAction]ext.ObjectMutateActionFunc{},
+		ui:      ui,
+		client:  client,
+		confirm: NewConfirm(ui),
+		form:    NewForm(ui),
 	}
 }
 
-func (p *Editor) RegisterObjectMutateActions(
-	typeName string,
-	actions map[ext.ObjectMutateAction]ext.ObjectMutateActionFunc,
-) {
-	p.mu.Lock()
-	p.actionGroups[typeName] = actions
-	p.mu.Unlock()
-}
-
 func (p *Editor) edit(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
+	if c, ok := object.(k8s.Controller); ok {
+		object = c.Controller()
+	}
 	objData, err := yaml.Marshal(object)
 	if err != nil {
 		return nil, err
@@ -101,29 +88,9 @@ func (p *Editor) edit(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
 
 				var unsupportedErr k8s.UnsupportedObjectError
 				if xerrors.As(err, &unsupportedErr) {
-					p.mu.RLock()
-					defer p.mu.RUnlock()
-					if actions, ok := p.actionGroups[unsupportedErr.TypeName]; ok && actions[ext.MutateUpdate] != nil {
-						objInt := reflect.New(reflect.TypeOf(object).Elem()).Interface()
-						if err = json.Unmarshal(jsonData, objInt); err != nil {
-							err = xerrors.Errorf("unmarshaling data into %s: %w", unsupportedErr.TypeName, err)
-							return
-						}
-
-						err = actions[ext.MutateUpdate](objInt.(k8s.ObjectMetaGetter))
-						if err != nil {
-							var statusError *kerrs.StatusError
-
-							if xerrors.As(err, &statusError) {
-								msg = strings.SplitN(statusError.ErrStatus.Message, "\n", 2)[0] + "\n"
-								continue
-							}
-						}
-					} else {
-						err = xerrors.Errorf(
-							"Update not supported on %s: %w", unsupportedErr.TypeName, err)
-						return
-					}
+					err = xerrors.Errorf(
+						"Update not supported on %s: %w", unsupportedErr.TypeName, err)
+					return
 				}
 			}
 
@@ -156,14 +123,8 @@ func (p *Editor) delete(object k8s.ObjectMetaGetter) error {
 	if err := p.client.DeleteObject(object, time.Minute); err != nil {
 		var unsupportedErr k8s.UnsupportedObjectError
 		if xerrors.As(err, &unsupportedErr) {
-			p.mu.RLock()
-			defer p.mu.RUnlock()
-			if actions, ok := p.actionGroups[unsupportedErr.TypeName]; ok && actions[ext.MutateDelete] != nil {
-				return actions[ext.MutateUpdate](object)
-			} else {
-				return xerrors.Errorf(
-					"Update not supported on %s: %w", unsupportedErr.TypeName, err)
-			}
+			return xerrors.Errorf(
+				"Update not supported on %s: %w", unsupportedErr.TypeName, err)
 		}
 		return err
 	}

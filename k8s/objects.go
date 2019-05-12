@@ -11,9 +11,6 @@ import (
 	"strings"
 	"time"
 
-	av1 "k8s.io/api/apps/v1"
-	bv1 "k8s.io/api/batch/v1"
-	bv1b1 "k8s.io/api/batch/v1beta1"
 	cv1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -65,6 +62,8 @@ type ControllerOperator struct {
 	Factory ControllerFactory
 	List    ControllerList
 	Watch   ControllerWatch
+	Update  ControllerUpdate
+	Delete  ControllerDelete
 }
 
 type ControllerFactory func(o ObjectMetaGetter, tree PodTree) Controller
@@ -73,6 +72,8 @@ type ControllerList func(c ClientSet, ns string, opts meta.ListOptions) (
 	ControllerGenerator, error,
 )
 type ControllerWatch func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error)
+type ControllerUpdate func(c ClientSet, obj ObjectMetaGetter) error
+type ControllerDelete func(c ClientSet, obj ObjectMetaGetter, opts meta.DeleteOptions) error
 
 type Category string
 
@@ -402,84 +403,22 @@ func (c *Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 		}
 
 		*v = *update
-	case *Ctrl:
-		switch v.ObjectMetaGetter.(type) {
-		case *av1.StatefulSet:
-			update := &av1.StatefulSet{}
-
-			if err := json.Unmarshal(data, update); err != nil {
-				return xerrors.Errorf("unmarshaling data into stateful set: %w", err)
-			}
-			update, err := c.AppsV1().StatefulSets(v.GetObjectMeta().GetNamespace()).Update(update)
-			if err != nil {
-				return xerrors.Errorf("updating stateful set %s: %w", update.GetName(), err)
-			}
-
-			v.ObjectMetaGetter = update
-		case *av1.Deployment:
-			update := &av1.Deployment{}
-
-			if err := json.Unmarshal(data, update); err != nil {
-				return xerrors.Errorf("unmarshaling data into deployment: %w", err)
-			}
-			update, err := c.AppsV1().Deployments(v.GetObjectMeta().GetNamespace()).Update(update)
-			if err != nil {
-				return xerrors.Errorf("updating deployment %s: %w", update.GetName(), err)
-			}
-
-			v.ObjectMetaGetter = update
-		case *av1.DaemonSet:
-			update := &av1.DaemonSet{}
-
-			if err := json.Unmarshal(data, update); err != nil {
-				return xerrors.Errorf("unmarshaling data into daemon set: %w", err)
-			}
-			update, err := c.AppsV1().DaemonSets(v.GetObjectMeta().GetNamespace()).Update(update)
-			if err != nil {
-				return xerrors.Errorf("updating daemon set %s: %w", update.GetName(), err)
-			}
-
-			v.ObjectMetaGetter = update
-		case *bv1.Job:
-			update := &bv1.Job{}
-
-			if err := json.Unmarshal(data, update); err != nil {
-				return xerrors.Errorf("unmarshaling data into job: %w", err)
-			}
-			update, err := c.BatchV1().Jobs(v.GetObjectMeta().GetNamespace()).Update(update)
-			if err != nil {
-				return xerrors.Errorf("updating job %s: %w", update.GetName(), err)
-			}
-
-			v.ObjectMetaGetter = update
-		case *bv1b1.CronJob:
-			update := &bv1b1.CronJob{}
-
-			if err := json.Unmarshal(data, update); err != nil {
-				return xerrors.Errorf("unmarshaling data into cron job: %w", err)
-			}
-			update, err := c.BatchV1beta1().CronJobs(v.GetObjectMeta().GetNamespace()).Update(update)
-			if err != nil {
-				return xerrors.Errorf("updating job %s: %w", update.GetName(), err)
-			}
-
-			v.ObjectMetaGetter = update
-		case *cv1.Service:
-			update := &cv1.Service{}
-
-			if err := json.Unmarshal(data, update); err != nil {
-				return xerrors.Errorf("unmarshaling data into service: %w", err)
-			}
-			update, err := c.CoreV1().Services(v.GetObjectMeta().GetNamespace()).Update(update)
-			if err != nil {
-				return xerrors.Errorf("updating service %s: %w", update.GetName(), err)
-			}
-
-			v.ObjectMetaGetter = update
-		}
 	default:
 		typeName := strings.Split(fmt.Sprintf("%T", object), ".")[1]
-		return UnsupportedObjectError{TypeName: typeName}
+		c.mu.RLock()
+
+		op, ok := c.controllerOperators[ControllerType(typeName)]
+		c.mu.RUnlock()
+		if !ok || op.Update == nil {
+			return UnsupportedObjectError{TypeName: typeName}
+		}
+
+		update := reflect.New(reflect.TypeOf(object).Elem()).Interface()
+		if err := json.Unmarshal(data, update); err != nil {
+			return xerrors.Errorf("unmarshaling data into %s: %w", typeName, err)
+		}
+
+		return op.Update(c, update.(ObjectMetaGetter))
 	}
 
 	return nil
@@ -511,7 +450,40 @@ func (c *Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) er
 		}
 	default:
 		typeName := strings.Split(fmt.Sprintf("%T", object), ".")[1]
-		return UnsupportedObjectError{TypeName: typeName}
+		c.mu.RLock()
+
+		op, ok := c.controllerOperators[ControllerType(typeName)]
+		c.mu.RUnlock()
+		if !ok || op.Delete == nil {
+			return UnsupportedObjectError{TypeName: typeName}
+		}
+
+		prop := meta.DeletePropagationForeground
+		if err := op.Delete(c, object, meta.DeleteOptions{PropagationPolicy: &prop}); err != nil {
+			return err
+		}
+
+		if op.Watch != nil {
+			w, err := op.Watch(c, object.GetObjectMeta().GetNamespace(), meta.ListOptions{
+				FieldSelector: "metadata.name=" + v.GetObjectMeta().GetName(),
+			})
+			if err != nil {
+				return xerrors.Errorf("getting %s watcher: %w", typeName, err)
+			}
+			for {
+				select {
+				case <-time.After(timeout):
+					w.Stop()
+					return nil
+				case ev := <-w.ResultChan():
+					if ev.Type == watch.Deleted {
+						return nil
+					}
+				}
+			}
+		}
+
+		return nil
 	}
 
 	return nil

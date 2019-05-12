@@ -40,12 +40,12 @@
         kd.Display(config)
     }
 
-    ConfigMap.prototype.del = function(obj) {
-        kd.Client().CoreV1().ConfigMaps(obj.Namespace).Delete(obj.Name, {"PropagationPolicy": "Foreground"})
+    ConfigMap.prototype.update = function(c, obj) {
+        c.CoreV1().ConfigMaps(obj.Namespace).Update(obj)
     }
 
-    ConfigMap.prototype.update = function(obj) {
-        kd.Client().CoreV1().ConfigMaps(obj.Namespace).Update(obj, {})
+    ConfigMap.prototype.del = function(c, obj, opts) {
+        c.CoreV1().ConfigMaps(obj.Namespace).Delete(obj.Name, opts)
     }
 
     ConfigMap.prototype.summary = function(obj) {
@@ -59,8 +59,11 @@
     // Return ["Action name", callback] otherwise.
     kd.RegisterActionOnObjectSelected(configMap.onObjectSelected.bind(configMap))
 
-    // Register callbacks that deal with object mutation of a certain type
-    kd.RegisterObjectMutateActions("ConfigMap", {"delete": configMap.del.bind(configMap), "update": configMap.update.bind(configMap)})
+    // Register callbacks that deal with object operation of a certain type
+    kd.RegisterControllerOperator("ConfigMap", {
+        "Update": configMap.update.bind(configMap),
+        "Delete": configMap.del.bind(configMap)
+    })
 
     // Register callbacks that deal with object mutation of a certain type
     kd.RegisterObjectSummaryProvider("ConfigMap", configMap.summary.bind(configMap))

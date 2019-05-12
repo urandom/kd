@@ -78,7 +78,6 @@ func NewPods(ui *ui.UI, client *k8s.Client, extManager ext.Manager) *Pods {
 			p.selectedActions = append(p.selectedActions, action)
 			p.mu.Unlock()
 		}),
-		ext.RegisterObjectMutateActions(p.editor.RegisterObjectMutateActions),
 		ext.RegisterObjectSummaryProvider(p.details.RegisterObjectMutateActions),
 	); err != nil {
 		log.Println("Error starting extension manager:", err)

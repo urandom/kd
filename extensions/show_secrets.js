@@ -63,12 +63,12 @@
         kd.Display(this.secrets[key])
     }
 
-    Secrets.prototype.del = function(obj) {
-        kd.Client().CoreV1().Secrets(obj.Namespace).Delete(obj.Name, {"PropagationPolicy": "Foreground"})
+    Secrets.prototype.update = function(c, obj) {
+        c.CoreV1().Secrets(obj.Namespace).Update(obj)
     }
 
-    Secrets.prototype.update = function(obj) {
-        kd.Client().CoreV1().Secrets(obj.Namespace).Update(obj, {})
+    Secrets.prototype.del = function(c, obj, opts) {
+        c.CoreV1().Secrets(obj.Namespace).Delete(obj.Name, opts)
     }
 
     Secrets.prototype.summary = function(obj) {
@@ -86,8 +86,11 @@
     // Return ["Action name", callback] otherwise.
     kd.RegisterActionOnObjectSelected(secrets.onObjectSelected.bind(secrets))
 
-    // Register callbacks that deal with object mutation of a certain type
-    kd.RegisterObjectMutateActions("Secret", {"delete": secrets.del.bind(secrets), "update": secrets.update.bind(secrets)})
+    // Register callbacks that deal with object operation of a certain type
+    kd.RegisterControllerOperator("Secret", {
+        "Update": secrets.update.bind(secrets),
+        "Delete": secrets.del.bind(secrets)
+    })
 
     // Register callbacks that deal with object mutation of a certain type
     kd.RegisterObjectSummaryProvider("Secret", secrets.summary.bind(secrets))

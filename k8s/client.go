@@ -136,6 +136,15 @@ func (c *Client) registerDefaults() {
 			}
 			return w, err
 		},
+		Update: func(c ClientSet, o ObjectMetaGetter) (err error) {
+			if o, ok := o.(*av1.StatefulSet); ok {
+				_, err = c.AppsV1().StatefulSets(o.GetObjectMeta().GetNamespace()).Update(o)
+			}
+			if err != nil {
+				return xerrors.Errorf("updating %s %s: %w", StatefulSetType, o.GetObjectMeta().GetName(), err)
+			}
+			return err
+		},
 	})
 
 	c.RegisterControllerOperator(DeploymentType, ControllerOperator{
@@ -170,6 +179,15 @@ func (c *Client) registerDefaults() {
 				err = xerrors.Errorf("getting watcher for %s: %w", DeploymentType, err)
 			}
 			return w, err
+		},
+		Update: func(c ClientSet, o ObjectMetaGetter) (err error) {
+			if o, ok := o.(*av1.Deployment); ok {
+				_, err = c.AppsV1().Deployments(o.GetObjectMeta().GetNamespace()).Update(o)
+			}
+			if err != nil {
+				return xerrors.Errorf("updating %s %s: %w", DeploymentType, o.GetObjectMeta().GetName(), err)
+			}
+			return err
 		},
 	})
 
@@ -206,6 +224,15 @@ func (c *Client) registerDefaults() {
 			}
 			return w, err
 		},
+		Update: func(c ClientSet, o ObjectMetaGetter) (err error) {
+			if o, ok := o.(*av1.DaemonSet); ok {
+				_, err = c.AppsV1().DaemonSets(o.GetObjectMeta().GetNamespace()).Update(o)
+			}
+			if err != nil {
+				return xerrors.Errorf("updating %s %s: %w", DaemonSetType, o.GetObjectMeta().GetName(), err)
+			}
+			return err
+		},
 	})
 
 	c.RegisterControllerOperator(JobType, ControllerOperator{
@@ -240,6 +267,15 @@ func (c *Client) registerDefaults() {
 				err = xerrors.Errorf("getting watcher for %s: %w", JobType, err)
 			}
 			return w, err
+		},
+		Update: func(c ClientSet, o ObjectMetaGetter) (err error) {
+			if o, ok := o.(*bv1.Job); ok {
+				_, err = c.BatchV1().Jobs(o.GetObjectMeta().GetNamespace()).Update(o)
+			}
+			if err != nil {
+				return xerrors.Errorf("updating %s %s: %w", JobType, o.GetObjectMeta().GetName(), err)
+			}
+			return err
 		},
 	})
 
@@ -276,6 +312,15 @@ func (c *Client) registerDefaults() {
 			}
 			return w, err
 		},
+		Update: func(c ClientSet, o ObjectMetaGetter) (err error) {
+			if o, ok := o.(*bv1b1.CronJob); ok {
+				_, err = c.BatchV1beta1().CronJobs(o.GetObjectMeta().GetNamespace()).Update(o)
+			}
+			if err != nil {
+				return xerrors.Errorf("updating %s %s: %w", CronJobType, o.GetObjectMeta().GetName(), err)
+			}
+			return err
+		},
 	})
 
 	c.RegisterControllerOperator(ServiceType, ControllerOperator{
@@ -310,6 +355,15 @@ func (c *Client) registerDefaults() {
 				err = xerrors.Errorf("getting watcher for %s: %w", ServiceType, err)
 			}
 			return w, err
+		},
+		Update: func(c ClientSet, o ObjectMetaGetter) (err error) {
+			if o, ok := o.(*cv1.Service); ok {
+				_, err = c.CoreV1().Services(o.GetObjectMeta().GetNamespace()).Update(o)
+			}
+			if err != nil {
+				return xerrors.Errorf("updating %s %s: %w", ServiceType, o.GetObjectMeta().GetName(), err)
+			}
+			return err
 		},
 	})
 }

@@ -33,12 +33,12 @@
         kd.Display(secret)
     }
 
-    PV.prototype.del = function(obj) {
-        kd.Client().CoreV1().PersistentVolumes().Delete(obj.Name, {"PropagationPolicy": "Foreground"})
+    PV.prototype.update = function(c, obj) {
+        c.CoreV1().PersistentVolumes().Update(obj)
     }
 
-    PV.prototype.update = function(obj) {
-        kd.Client().CoreV1().PersistentVolumes().Update(obj, {})
+    PV.prototype.del = function(c, obj, opts) {
+        c.CoreV1().PersistentVolumes().Delete(obj.Name, opts)
     }
 
     PV.prototype.summary = function(obj) {
@@ -63,8 +63,11 @@
     // Return ["Action name", callback] otherwise.
     kd.RegisterActionOnObjectSelected(pv.onObjectSelected.bind(pv))
 
-    // Register callbacks that deal with object mutation of a certain type
-    kd.RegisterObjectMutateActions("PersistentVolume", {"delete": pv.del.bind(pv), "update": pv.update.bind(pv)})
+    // Register callbacks that deal with object operation of a certain type
+    kd.RegisterControllerOperator("PersistentVolume", {
+        "Update": pv.update.bind(pv),
+        "Delete": pv.del.bind(pv)
+    })
 
     // Register callbacks that deal with object mutation of a certain type
     kd.RegisterObjectSummaryProvider("PersistentVolume", pv.summary.bind(pv))
