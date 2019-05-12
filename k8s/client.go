@@ -3,7 +3,11 @@ package k8s
 import (
 	"os"
 	"path/filepath"
+	"sync"
 
+	av1 "k8s.io/api/apps/v1"
+	bv1 "k8s.io/api/batch/v1"
+	bv1b1 "k8s.io/api/batch/v1beta1"
 	cv1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -18,7 +22,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-type clientSet interface {
+type ClientSet interface {
 	AppsV1() apps.AppsV1Interface
 	CoreV1() core.CoreV1Interface
 	BatchV1() batch.BatchV1Interface
@@ -28,7 +32,10 @@ type clientSet interface {
 
 // Client provides functions around the k8s clientset api.
 type Client struct {
-	clientSet
+	ClientSet
+
+	mu                  sync.RWMutex
+	controllerOperators ControllerOperators
 }
 
 // New returns a new k8s Client, using the kubeconfig specified by the path, or
@@ -52,8 +59,10 @@ func New(configPath string) (*Client, error) {
 		return nil, xerrors.Errorf("creating k8s clientset: %w", err)
 	}
 
-	client := &Client{}
-	client.clientSet = clientset
+	client := &Client{controllerOperators: ControllerOperators{}}
+	client.ClientSet = clientset
+
+	client.registerDefaults()
 
 	return client, nil
 }
@@ -84,4 +93,180 @@ func (c *Client) Events(obj meta.Object) ([]cv1.Event, error) {
 		err = xerrors.Errorf("getting list of events for object %s: %w", name, err)
 	}
 	return list.Items, err
+}
+
+func (c *Client) RegisterControllerOperator(kind ControllerType, op ControllerOperator) {
+	c.mu.Lock()
+	c.controllerOperators[kind] = op
+	c.mu.Unlock()
+}
+
+func (c *Client) registerDefaults() {
+	c.RegisterControllerOperator(StatefulSetType, ControllerOperator{
+		Factory: func(o ObjectMetaGetter, tree PodTree) Controller {
+			if o, ok := o.(*av1.StatefulSet); ok {
+				return NewGenericCtrl(o, CategoryStatefulSet, o.Spec.Selector.MatchLabels, tree)
+			}
+
+			return nil
+		},
+		List: func(c ClientSet, ns string, opts meta.ListOptions) (
+			ControllerGenerator, error,
+		) {
+			l, err := c.AppsV1().StatefulSets(ns).List(opts)
+			if err != nil {
+				return nil, xerrors.Errorf("getting list for %s: %w", StatefulSetType, err)
+			}
+
+			return func(factory ControllerFactory, tree PodTree) Controllers {
+				controllers := make(Controllers, len(l.Items))
+
+				for i := range l.Items {
+					controllers[i] = factory(&l.Items[i], tree)
+				}
+
+				return controllers
+			}, nil
+		},
+	})
+
+	c.RegisterControllerOperator(DeploymentType, ControllerOperator{
+		Factory: func(o ObjectMetaGetter, tree PodTree) Controller {
+			if o, ok := o.(*av1.Deployment); ok {
+				return NewGenericCtrl(o, CategoryDeployment, o.Spec.Selector.MatchLabels, tree)
+			}
+
+			return nil
+		},
+		List: func(c ClientSet, ns string, opts meta.ListOptions) (
+			ControllerGenerator, error,
+		) {
+			l, err := c.AppsV1().Deployments(ns).List(opts)
+			if err != nil {
+				return nil, xerrors.Errorf("getting list for %s: %w", DeploymentType, err)
+			}
+
+			return func(factory ControllerFactory, tree PodTree) Controllers {
+				controllers := make(Controllers, len(l.Items))
+
+				for i := range l.Items {
+					controllers[i] = factory(&l.Items[i], tree)
+				}
+
+				return controllers
+			}, nil
+		},
+	})
+
+	c.RegisterControllerOperator(DaemonSetType, ControllerOperator{
+		Factory: func(o ObjectMetaGetter, tree PodTree) Controller {
+			if o, ok := o.(*av1.DaemonSet); ok {
+				return NewGenericCtrl(o, CategoryDaemonSet, o.Spec.Selector.MatchLabels, tree)
+			}
+
+			return nil
+		},
+		List: func(c ClientSet, ns string, opts meta.ListOptions) (
+			ControllerGenerator, error,
+		) {
+			l, err := c.AppsV1().DaemonSets(ns).List(opts)
+			if err != nil {
+				return nil, xerrors.Errorf("getting list for %s: %w", DaemonSetType, err)
+			}
+
+			return func(factory ControllerFactory, tree PodTree) Controllers {
+				controllers := make(Controllers, len(l.Items))
+
+				for i := range l.Items {
+					controllers[i] = factory(&l.Items[i], tree)
+				}
+
+				return controllers
+			}, nil
+		},
+	})
+
+	c.RegisterControllerOperator(JobType, ControllerOperator{
+		Factory: func(o ObjectMetaGetter, tree PodTree) Controller {
+			if o, ok := o.(*bv1.Job); ok {
+				return NewGenericCtrl(o, CategoryJob, o.Spec.Selector.MatchLabels, tree)
+			}
+
+			return nil
+		},
+		List: func(c ClientSet, ns string, opts meta.ListOptions) (
+			ControllerGenerator, error,
+		) {
+			l, err := c.BatchV1().Jobs(ns).List(opts)
+			if err != nil {
+				return nil, xerrors.Errorf("getting list for %s: %w", JobType, err)
+			}
+
+			return func(factory ControllerFactory, tree PodTree) Controllers {
+				controllers := make(Controllers, len(l.Items))
+
+				for i := range l.Items {
+					controllers[i] = factory(&l.Items[i], tree)
+				}
+
+				return controllers
+			}, nil
+		},
+	})
+
+	c.RegisterControllerOperator(CronJobType, ControllerOperator{
+		Factory: func(o ObjectMetaGetter, tree PodTree) Controller {
+			if o, ok := o.(*bv1b1.CronJob); ok {
+				return NewInheritCtrl(o, CategoryCronJob, tree)
+			}
+
+			return nil
+		},
+		List: func(c ClientSet, ns string, opts meta.ListOptions) (
+			ControllerGenerator, error,
+		) {
+			l, err := c.BatchV1beta1().CronJobs(ns).List(opts)
+			if err != nil {
+				return nil, xerrors.Errorf("getting list for %s: %w", CronJobType, err)
+			}
+
+			return func(factory ControllerFactory, tree PodTree) Controllers {
+				controllers := make(Controllers, len(l.Items))
+
+				for i := range l.Items {
+					controllers[i] = factory(&l.Items[i], tree)
+				}
+
+				return controllers
+			}, nil
+		},
+	})
+
+	c.RegisterControllerOperator(ServiceType, ControllerOperator{
+		Factory: func(o ObjectMetaGetter, tree PodTree) Controller {
+			if o, ok := o.(*cv1.Service); ok {
+				return NewGenericCtrl(o, CategoryService, o.Spec.Selector, tree)
+			}
+
+			return nil
+		},
+		List: func(c ClientSet, ns string, opts meta.ListOptions) (
+			ControllerGenerator, error,
+		) {
+			l, err := c.CoreV1().Services(ns).List(opts)
+			if err != nil {
+				return nil, xerrors.Errorf("getting list for %s: %w", ServiceType, err)
+			}
+
+			return func(factory ControllerFactory, tree PodTree) Controllers {
+				controllers := make(Controllers, len(l.Items))
+
+				for i := range l.Items {
+					controllers[i] = factory(&l.Items[i], tree)
+				}
+
+				return controllers
+			}, nil
+		},
+	})
 }

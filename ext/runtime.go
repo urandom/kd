@@ -114,7 +114,8 @@ func (rt *runtime) RegisterObjectSummaryProvider(typeName string, provider func(
 	rt.options.registerObjectSummaryProviderFunc(typeName, normalized)
 }
 
-func (rt *runtime) RegisterControllerFactory(typeName k8s.ControllerType, provider func(k8s.ObjectMetaGetter, k8s.PodTree) k8s.Controller) {
+func (rt *runtime) RegisterControllerFactory(typeName k8s.ControllerType, op k8s.ControllerOperator) {
+	rt.Client().RegisterControllerOperator(typeName, op)
 }
 
 func (rt *runtime) Client() *k8s.Client {
@@ -137,6 +138,7 @@ func (rt *runtime) SetData() {
 		}
 		return *s
 	})
+	rt.vm.Set("GenericCtrl", k8s.NewGenericCtrl)
 }
 
 func (rt *runtime) ToYAML(v interface{}) (string, error) {

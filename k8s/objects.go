@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"log"
 	"reflect"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	av1 "k8s.io/api/apps/v1"
@@ -44,18 +44,33 @@ type ObjectMetaGetter interface {
 }
 
 type Selector map[string]string
-type ControllerFactory func(o ObjectMetaGetter, tree PodTree) Controller
 
-var (
-	factories = map[ControllerType]ControllerFactory{}
-	mu        = sync.RWMutex{}
-)
+type ControllerOperators map[ControllerType]ControllerOperator
 
-func RegisterControllerFactory(kind ControllerType, f ControllerFactory) {
-	mu.Lock()
-	factories[kind] = f
-	mu.Unlock()
+func (c ControllerOperators) Types() []ControllerType {
+	types := make([]ControllerType, 0, len(c))
+
+	for k := range c {
+		types = append(types, k)
+	}
+
+	sort.Slice(types, func(i, j int) bool {
+		return types[i].weight() < types[j].weight()
+	})
+
+	return types
 }
+
+type ControllerOperator struct {
+	Factory ControllerFactory
+	List    ControllerList
+}
+
+type ControllerFactory func(o ObjectMetaGetter, tree PodTree) Controller
+type ControllerGenerator func(factory ControllerFactory, tree PodTree) Controllers
+type ControllerList func(c ClientSet, ns string, opts meta.ListOptions) (
+	ControllerGenerator, error,
+)
 
 type Category string
 
@@ -104,6 +119,27 @@ const (
 	ServiceType     ControllerType = "Service"
 )
 
+func (t ControllerType) weight() int {
+	switch t {
+	case StatefulSetType:
+		return 1
+	case DeploymentType:
+		return 2
+	case DaemonSetType:
+		return 3
+	case JobType:
+		return 4
+	case CronJobType:
+		return 5
+	case ServiceType:
+		return 6
+	default:
+		hash := fnv.New32()
+		hash.Write([]byte(t))
+		return int(hash.Sum32())
+	}
+}
+
 type Controller interface {
 	PodManager
 	ObjectMetaGetter
@@ -133,8 +169,8 @@ type Ctrl struct {
 	pods     Pods
 }
 
-func NewGenericCtrl(o ObjectMetaGetter, category Category, selector Selector, allPods Pods) *Ctrl {
-	return &Ctrl{o, category, selector, matchPods(allPods, selector)}
+func NewGenericCtrl(o ObjectMetaGetter, category Category, selector Selector, tree PodTree) *Ctrl {
+	return &Ctrl{o, category, selector, matchPods(tree.pods, selector)}
 }
 
 func NewInheritCtrl(o ObjectMetaGetter, category Category, tree PodTree) *Ctrl {
@@ -259,7 +295,7 @@ func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodW
 	}
 
 	ch := make(chan PodWatcherEvent)
-	go selectFromWatchers(ctx, ch, tree, pw, stsw, dw, dsw, jw, cjw, sw)
+	go c.selectFromWatchers(ctx, ch, tree, pw, stsw, dw, dsw, jw, cjw, sw)
 
 	window := make(chan PodWatcherEvent)
 	go func() {
@@ -294,112 +330,71 @@ func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodW
 }
 
 func (c *Client) PodTree(nsName string) (PodTree, error) {
-	core := c.CoreV1()
-	apps := c.AppsV1()
-	batch := c.BatchV1()
-	batchBeta := c.BatchV1beta1()
-
 	tree := PodTree{}
 
-	var (
-		pods         *cv1.PodList
-		statefulsets *av1.StatefulSetList
-		deployments  *av1.DeploymentList
-		daemonsets   *av1.DaemonSetList
-		jobs         *bv1.JobList
-		cronjobs     *bv1b1.CronJobList
-		services     *cv1.ServiceList
-	)
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	g := &errgroup.Group{}
+
+	var pods *cv1.PodList
 	g.Go(func() (err error) {
-		if pods, err = core.Pods(nsName).List(meta.ListOptions{}); err != nil {
+		if pods, err = c.CoreV1().Pods(nsName).List(meta.ListOptions{}); err != nil {
 			return xerrors.Errorf("getting list of pods for ns %s: %w", nsName, err)
 		}
 		return nil
 	})
 
-	g.Go(func() (err error) {
-		if statefulsets, err = apps.StatefulSets(nsName).List(meta.ListOptions{}); err != nil {
-			return xerrors.Errorf("getting list of stateful sets for ns %s: %w", nsName, err)
-		}
-		return nil
-	})
+	types := c.controllerOperators.Types()
+	type genType struct {
+		gen  ControllerGenerator
+		kind ControllerType
+	}
+	genC := make(chan genType)
+	for _, t := range types {
+		t := t
+		g.Go(func() error {
+			if c.controllerOperators[t].List == nil {
+				return nil
+			}
 
-	g.Go(func() (err error) {
-		if deployments, err = apps.Deployments(nsName).List(meta.ListOptions{}); err != nil {
-			return xerrors.Errorf("getting list of deployments for ns %s: %w", nsName, err)
-		}
-		return nil
-	})
+			gen, err := c.controllerOperators[t].List(c, nsName, meta.ListOptions{})
+			if err != nil {
+				return err
+			}
 
-	g.Go(func() (err error) {
-		if daemonsets, err = apps.DaemonSets(nsName).List(meta.ListOptions{}); err != nil {
-			return xerrors.Errorf("getting list of daemon sets for ns %s: %w", nsName, err)
-		}
-		return nil
-	})
+			genC <- genType{gen, t}
+			log.Printf("%v %v", gen, t)
+			return nil
+		})
+	}
 
-	g.Go(func() (err error) {
-		if jobs, err = batch.Jobs(nsName).List(meta.ListOptions{}); err != nil {
-			return xerrors.Errorf("getting list of jobs for ns %s: %w", nsName, err)
+	genMapC := make(chan map[ControllerType]ControllerGenerator)
+	go func() {
+		genMap := map[ControllerType]ControllerGenerator{}
+		for genT := range genC {
+			genMap[genT.kind] = genT.gen
 		}
-		return nil
-	})
-
-	g.Go(func() (err error) {
-		if cronjobs, err = batchBeta.CronJobs(nsName).List(meta.ListOptions{}); err != nil {
-			return xerrors.Errorf("getting list of cronjobs for ns %s: %w", nsName, err)
-		}
-		return nil
-	})
-
-	g.Go(func() (err error) {
-		if services, err = core.Services(nsName).List(meta.ListOptions{}); err != nil {
-			return xerrors.Errorf("getting list of services for ns %s: %w", nsName, err)
-		}
-		return nil
-	})
+		genMapC <- genMap
+	}()
 
 	if err := g.Wait(); err != nil {
 		return tree, err
 	}
+	close(genC)
 
 	tree.pods = make(Pods, len(pods.Items))
 	for i := range pods.Items {
 		tree.pods[i] = &pods.Items[i]
 	}
 
-	mu.RLock()
-	defer mu.RUnlock()
-	factory := factories[StatefulSetType]
-	for i := range statefulsets.Items {
-		tree.Controllers = append(tree.Controllers, factory(&statefulsets.Items[i], tree))
-	}
-
-	factory = factories[DeploymentType]
-	for i := range deployments.Items {
-		tree.Controllers = append(tree.Controllers, factory(&deployments.Items[i], tree))
-	}
-
-	factory = factories[DaemonSetType]
-	for i := range daemonsets.Items {
-		tree.Controllers = append(tree.Controllers, factory(&daemonsets.Items[i], tree))
-	}
-
-	factory = factories[JobType]
-	for i := range jobs.Items {
-		tree.Controllers = append(tree.Controllers, factory(&jobs.Items[i], tree))
-	}
-
-	factory = factories[CronJobType]
-	for i := range cronjobs.Items {
-		tree.Controllers = append(tree.Controllers, factory(&cronjobs.Items[i], tree))
-	}
-
-	factory = factories[ServiceType]
-	for i := range services.Items {
-		tree.Controllers = append(tree.Controllers, factory(&services.Items[i], tree))
+	genMap := <-genMapC
+	for _, t := range types {
+		gen := genMap[t]
+		factory := c.controllerOperators[t].Factory
+		if factory != nil {
+			tree.Controllers = append(tree.Controllers, gen(factory, tree)...)
+		}
 	}
 
 	return tree, nil
@@ -534,6 +529,58 @@ func (c *Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) er
 	return nil
 }
 
+func (c *Client) selectFromWatchers(
+	ctx context.Context, agg chan<- PodWatcherEvent,
+	tree PodTree, wi ...watch.Interface) {
+
+	evC := make(chan watch.Event)
+	for _, w := range wi {
+		go func(w <-chan watch.Event) {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case ev := <-w:
+					evC <- ev
+				}
+			}
+		}(w.ResultChan())
+	}
+
+	agg <- PodWatcherEvent{Tree: tree.DeepCopy()}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev := <-evC:
+			switch o := ev.Object.(type) {
+			case *cv1.Pod:
+				modifyPodInTree(&tree, o, ev.Type == watch.Deleted)
+				agg <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
+			case ObjectMetaGetter:
+				typeName := strings.Split(fmt.Sprintf("%T", o), ".")[1]
+				var factory ControllerFactory
+
+				c.mu.RLock()
+				if op, ok := c.controllerOperators[ControllerType(typeName)]; ok {
+					factory = op.Factory
+				}
+				c.mu.RUnlock()
+				if factory == nil {
+					log.Printf("Factory function for type %s missing", typeName)
+					continue
+				}
+
+				tree.Controllers = modifyControllerList(tree.Controllers, o,
+					func() Controller {
+						return factory(o, tree)
+					})
+
+				agg <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
+			}
+		}
+	}
+}
 func matchPods(pods Pods, selector map[string]string) Pods {
 	if len(selector) == 0 {
 		return nil
@@ -608,7 +655,7 @@ func modifyPodInList(pods Pods, pod *cv1.Pod, delete bool, labels map[string]str
 	return pods
 }
 
-func modifyControllerList(controllers []Controller, o ObjectMetaGetter, factory func() Controller) []Controller {
+func modifyControllerList(controllers Controllers, o ObjectMetaGetter, factory func() Controller) Controllers {
 	found := false
 	for i := range controllers {
 		if controllers[i].GetObjectMeta().GetUID() == o.GetObjectMeta().GetUID() {
@@ -643,102 +690,4 @@ func modifyControllerList(controllers []Controller, o ObjectMetaGetter, factory 
 	}
 
 	return controllers
-}
-
-func selectFromWatchers(
-	ctx context.Context, agg chan<- PodWatcherEvent,
-	tree PodTree, wi ...watch.Interface) {
-
-	evC := make(chan watch.Event)
-	for _, w := range wi {
-		go func(w <-chan watch.Event) {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case ev := <-w:
-					evC <- ev
-				}
-			}
-		}(w.ResultChan())
-	}
-
-	agg <- PodWatcherEvent{Tree: tree.DeepCopy()}
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case ev := <-evC:
-			switch o := ev.Object.(type) {
-			case *cv1.Pod:
-				modifyPodInTree(&tree, o, ev.Type == watch.Deleted)
-				agg <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
-			case ObjectMetaGetter:
-				typeName := strings.Split(fmt.Sprintf("%T", o), ".")[1]
-				var factory ControllerFactory
-
-				mu.RLock()
-				factory = factories[ControllerType(typeName)]
-				mu.RUnlock()
-
-				tree.Controllers = modifyControllerList(tree.Controllers, o,
-					func() Controller {
-						return factory(o, tree)
-					})
-
-				agg <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
-			}
-		}
-	}
-}
-
-func init() {
-	RegisterControllerFactory(StatefulSetType, func(o ObjectMetaGetter, tree PodTree) Controller {
-		if o, ok := o.(*av1.StatefulSet); ok {
-			return NewGenericCtrl(o, CategoryStatefulSet, o.Spec.Selector.MatchLabels, tree.pods)
-		}
-
-		return nil
-	})
-
-	RegisterControllerFactory(DeploymentType, func(o ObjectMetaGetter, tree PodTree) Controller {
-		if o, ok := o.(*av1.Deployment); ok {
-			return NewGenericCtrl(o, CategoryDeployment, o.Spec.Selector.MatchLabels, tree.pods)
-		}
-
-		return nil
-	})
-
-	RegisterControllerFactory(DaemonSetType, func(o ObjectMetaGetter, tree PodTree) Controller {
-		if o, ok := o.(*av1.DaemonSet); ok {
-			return NewGenericCtrl(o, CategoryDaemonSet, o.Spec.Selector.MatchLabels, tree.pods)
-		}
-
-		return nil
-	})
-
-	RegisterControllerFactory(JobType, func(o ObjectMetaGetter, tree PodTree) Controller {
-		if o, ok := o.(*bv1.Job); ok {
-			return NewGenericCtrl(o, CategoryJob, o.Spec.Selector.MatchLabels, tree.pods)
-		}
-
-		return nil
-	})
-
-	RegisterControllerFactory(CronJobType, func(o ObjectMetaGetter, tree PodTree) Controller {
-		if o, ok := o.(*bv1b1.CronJob); ok {
-			return NewInheritCtrl(o, CategoryCronJob, tree)
-		}
-
-		return nil
-	})
-
-	RegisterControllerFactory(ServiceType, func(o ObjectMetaGetter, tree PodTree) Controller {
-		if o, ok := o.(*cv1.Service); ok {
-			return NewGenericCtrl(o, CategoryService, o.Spec.Selector, tree.pods)
-		}
-
-		return nil
-	})
-
 }
