@@ -8,10 +8,13 @@ import (
 	"github.com/dop251/goja"
 	"github.com/urandom/kd/k8s"
 	"golang.org/x/xerrors"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/yaml"
 )
 
 type runtime struct {
+	name    string
 	options options
 	vm      *goja.Runtime
 	ops     chan func()
@@ -81,6 +84,96 @@ func (rt *runtime) RegisterObjectSummaryProvider(typeName string, provider func(
 }
 
 func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op k8s.ControllerOperator) {
+	if op.Factory != nil {
+		factory := op.Factory
+		op.Factory = func(o k8s.ObjectMetaGetter, tree k8s.PodTree) k8s.Controller {
+			ctrlC := make(chan k8s.Controller)
+
+			rt.ops <- func() {
+				ctrlC <- factory(o, tree)
+			}
+
+			return <-ctrlC
+		}
+	}
+
+	if op.List != nil {
+		list := op.List
+		op.List = func(c k8s.ClientSet, ns string, opts meta.ListOptions) (k8s.ControllerGenerator, error) {
+
+			type payload struct {
+				gen k8s.ControllerGenerator
+				err error
+			}
+			payloadC := make(chan payload)
+			rt.ops <- func() {
+				gen, err := list(c, ns, opts)
+
+				var normGen k8s.ControllerGenerator
+				if gen != nil {
+					normGen = func(factory k8s.ControllerFactory, tree k8s.PodTree) k8s.Controllers {
+						controllersC := make(chan k8s.Controllers)
+						rt.ops <- func() {
+							controllersC <- gen(factory, tree)
+						}
+
+						return <-controllersC
+					}
+				}
+
+				payloadC <- payload{normGen, err}
+			}
+
+			p := <-payloadC
+			return p.gen, p.err
+		}
+	}
+
+	if op.Watch != nil {
+		w := op.Watch
+		op.Watch = func(c k8s.ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+			type payload struct {
+				watch watch.Interface
+				err   error
+			}
+			payloadC := make(chan payload)
+
+			rt.ops <- func() {
+				watch, err := w(c, ns, opts)
+				payloadC <- payload{watch, err}
+			}
+
+			p := <-payloadC
+			return p.watch, p.err
+		}
+	}
+
+	if op.Update != nil {
+		update := op.Update
+		op.Update = func(c k8s.ClientSet, o k8s.ObjectMetaGetter) error {
+			errC := make(chan error)
+
+			rt.ops <- func() {
+				errC <- update(c, o)
+			}
+
+			return <-errC
+		}
+	}
+
+	if op.Delete != nil {
+		delete := op.Delete
+		op.Delete = func(c k8s.ClientSet, o k8s.ObjectMetaGetter, opts meta.DeleteOptions) error {
+			errC := make(chan error)
+
+			rt.ops <- func() {
+				errC <- delete(c, o, opts)
+			}
+
+			return <-errC
+		}
+	}
+
 	rt.Client().RegisterControllerOperator(typeName, op)
 }
 

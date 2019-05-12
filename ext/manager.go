@@ -29,6 +29,7 @@ func (m Manager) Start(
 	for name, e := range ext {
 		go func(name, e string) {
 			rt := &runtime{
+				name:    name,
 				options: o,
 				vm:      goja.New(),
 				ops:     make(chan func()),
@@ -43,6 +44,9 @@ func (m Manager) Start(
 }
 
 func (m Manager) Run(ext string, rt *runtime) {
-	rt.vm.RunString(ext)
-	rt.loop()
+	if _, err := rt.vm.RunString(ext); err == nil {
+		rt.loop()
+	} else {
+		log.Printf("Error running %s: %v", rt.name, err)
+	}
 }
