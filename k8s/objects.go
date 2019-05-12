@@ -353,7 +353,6 @@ func (c *Client) PodTree(nsName string) (PodTree, error) {
 			}
 
 			genC <- genType{gen, t}
-			log.Printf("%v %v", gen, t)
 			return nil
 		})
 	}
