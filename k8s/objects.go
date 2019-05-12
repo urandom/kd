@@ -64,6 +64,7 @@ func (c ControllerOperators) Types() []ControllerType {
 type ControllerOperator struct {
 	Factory ControllerFactory
 	List    ControllerList
+	Watch   ControllerWatch
 }
 
 type ControllerFactory func(o ObjectMetaGetter, tree PodTree) Controller
@@ -71,6 +72,7 @@ type ControllerGenerator func(factory ControllerFactory, tree PodTree) Controlle
 type ControllerList func(c ClientSet, ns string, opts meta.ListOptions) (
 	ControllerGenerator, error,
 )
+type ControllerWatch func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error)
 
 type Category string
 
@@ -256,46 +258,33 @@ type PodWatcherEvent struct {
 }
 
 func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWatcherEvent, error) {
-	core := c.CoreV1()
-	apps := c.AppsV1()
-	batch := c.BatchV1()
-	batchBeta := c.BatchV1beta1()
-
-	pw, err := core.Pods(nsName).Watch(meta.ListOptions{})
+	watchers := []watch.Interface{}
+	w, err := c.CoreV1().Pods(nsName).Watch(meta.ListOptions{})
 	if err != nil {
 		return nil, xerrors.Errorf("creating pod watcher: %w", err)
 	}
-	stsw, err := apps.StatefulSets(nsName).Watch(meta.ListOptions{})
-	if err != nil {
-		return nil, xerrors.Errorf("creating stateful set watcher: %w", err)
+	watchers = append(watchers, w)
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, op := range c.controllerOperators {
+		if op.Watch == nil {
+			continue
+		}
+
+		if w, err = op.Watch(c, nsName, meta.ListOptions{}); err != nil {
+			return nil, err
+		}
+		watchers = append(watchers, w)
 	}
-	dw, err := apps.Deployments(nsName).Watch(meta.ListOptions{})
-	if err != nil {
-		return nil, xerrors.Errorf("creating deployment watcher: %w", err)
-	}
-	dsw, err := apps.DaemonSets(nsName).Watch(meta.ListOptions{})
-	if err != nil {
-		return nil, xerrors.Errorf("creating daemon set watcher: %w", err)
-	}
-	jw, err := batch.Jobs(nsName).Watch(meta.ListOptions{})
-	if err != nil {
-		return nil, xerrors.Errorf("creating job watcher: %w", err)
-	}
-	cjw, err := batchBeta.CronJobs(nsName).Watch(meta.ListOptions{})
-	if err != nil {
-		return nil, xerrors.Errorf("creating cron job watcher: %w", err)
-	}
-	sw, err := core.Services(nsName).Watch(meta.ListOptions{})
-	if err != nil {
-		return nil, xerrors.Errorf("creating service watcher: %w", err)
-	}
+
 	tree, err := c.PodTree(nsName)
 	if err != nil {
 		return nil, xerrors.Errorf("getting initial pod tree: %w", err)
 	}
 
 	ch := make(chan PodWatcherEvent)
-	go c.selectFromWatchers(ctx, ch, tree, pw, stsw, dw, dsw, jw, cjw, sw)
+	go c.selectFromWatchers(ctx, ch, tree, watchers...)
 
 	window := make(chan PodWatcherEvent)
 	go func() {

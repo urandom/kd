@@ -10,6 +10,7 @@ import (
 	bv1b1 "k8s.io/api/batch/v1beta1"
 	cv1 "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	apps "k8s.io/client-go/kubernetes/typed/apps/v1"
 	batch "k8s.io/client-go/kubernetes/typed/batch/v1"
@@ -128,6 +129,13 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
+		Watch: func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+			w, err := c.AppsV1().StatefulSets(ns).Watch(opts)
+			if err != nil {
+				err = xerrors.Errorf("getting watcher for %s: %w", StatefulSetType, err)
+			}
+			return w, err
+		},
 	})
 
 	c.RegisterControllerOperator(DeploymentType, ControllerOperator{
@@ -155,6 +163,13 @@ func (c *Client) registerDefaults() {
 
 				return controllers
 			}, nil
+		},
+		Watch: func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+			w, err := c.AppsV1().Deployments(ns).Watch(opts)
+			if err != nil {
+				err = xerrors.Errorf("getting watcher for %s: %w", DeploymentType, err)
+			}
+			return w, err
 		},
 	})
 
@@ -184,6 +199,13 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
+		Watch: func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+			w, err := c.AppsV1().DaemonSets(ns).Watch(opts)
+			if err != nil {
+				err = xerrors.Errorf("getting watcher for %s: %w", DaemonSetType, err)
+			}
+			return w, err
+		},
 	})
 
 	c.RegisterControllerOperator(JobType, ControllerOperator{
@@ -211,6 +233,13 @@ func (c *Client) registerDefaults() {
 
 				return controllers
 			}, nil
+		},
+		Watch: func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+			w, err := c.BatchV1().Jobs(ns).Watch(opts)
+			if err != nil {
+				err = xerrors.Errorf("getting watcher for %s: %w", JobType, err)
+			}
+			return w, err
 		},
 	})
 
@@ -240,6 +269,13 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
+		Watch: func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+			w, err := c.BatchV1beta1().CronJobs(ns).Watch(opts)
+			if err != nil {
+				err = xerrors.Errorf("getting watcher for %s: %w", CronJobType, err)
+			}
+			return w, err
+		},
 	})
 
 	c.RegisterControllerOperator(ServiceType, ControllerOperator{
@@ -267,6 +303,13 @@ func (c *Client) registerDefaults() {
 
 				return controllers
 			}, nil
+		},
+		Watch: func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+			w, err := c.CoreV1().Services(ns).Watch(opts)
+			if err != nil {
+				err = xerrors.Errorf("getting watcher for %s: %w", ServiceType, err)
+			}
+			return w, err
 		},
 	})
 }
