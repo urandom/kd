@@ -84,10 +84,19 @@ func (rt *runtime) RegisterObjectSummaryProvider(typeName string, provider func(
 	rt.options.registerObjectSummaryProviderFunc(typeName, normalized)
 }
 
-func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op k8s.ControllerOperator) {
+type ControllerOperator struct {
+	Factory k8s.ControllerFactory
+	List    k8s.ControllerList
+	Watch   func(goja.FunctionCall) goja.Value
+	Update  k8s.ControllerUpdate
+	Delete  k8s.ControllerDelete
+}
+
+func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op ControllerOperator) {
+	var k8sOp k8s.ControllerOperator
 	if op.Factory != nil {
 		factory := op.Factory
-		op.Factory = func(o k8s.ObjectMetaGetter, tree k8s.PodTree) k8s.Controller {
+		k8sOp.Factory = func(o k8s.ObjectMetaGetter, tree k8s.PodTree) k8s.Controller {
 			ctrlC := make(chan k8s.Controller)
 
 			rt.ops <- func() {
@@ -100,7 +109,7 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op k8
 
 	if op.List != nil {
 		list := op.List
-		op.List = func(c k8s.ClientSet, ns string, opts meta.ListOptions) (k8s.ControllerGenerator, error) {
+		k8sOp.List = func(c k8s.ClientSet, ns string, opts meta.ListOptions) (k8s.ControllerGenerator, error) {
 
 			type payload struct {
 				gen k8s.ControllerGenerator
@@ -132,7 +141,7 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op k8
 
 	if op.Watch != nil {
 		w := op.Watch
-		op.Watch = func(c k8s.ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		k8sOp.Watch = func(c k8s.ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			type payload struct {
 				watch watch.Interface
 				err   error
@@ -140,8 +149,22 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op k8
 			payloadC := make(chan payload)
 
 			rt.ops <- func() {
-				watch, err := w(c, ns, opts)
-				payloadC <- payload{watch, err}
+				defer func() {
+					if err := recover(); err != nil {
+						payloadC <- payload{err: xerrors.Errorf("%v", err)}
+					}
+				}()
+				val := w(goja.FunctionCall{Arguments: []goja.Value{
+					rt.vm.ToValue(c),
+					rt.vm.ToValue(ns),
+					rt.vm.ToValue(opts),
+				}})
+
+				if watch, ok := val.Export().(watch.Interface); ok {
+					payloadC <- payload{watch: watch}
+				} else {
+					payloadC <- payload{err: xerrors.Errorf("invalid watch return type: %T", val.Export())}
+				}
 			}
 
 			p := <-payloadC
@@ -151,7 +174,7 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op k8
 
 	if op.Update != nil {
 		update := op.Update
-		op.Update = func(c k8s.ClientSet, o k8s.ObjectMetaGetter) error {
+		k8sOp.Update = func(c k8s.ClientSet, o k8s.ObjectMetaGetter) error {
 			errC := make(chan error)
 
 			rt.ops <- func() {
@@ -164,7 +187,7 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op k8
 
 	if op.Delete != nil {
 		delete := op.Delete
-		op.Delete = func(c k8s.ClientSet, o k8s.ObjectMetaGetter, opts meta.DeleteOptions) error {
+		k8sOp.Delete = func(c k8s.ClientSet, o k8s.ObjectMetaGetter, opts meta.DeleteOptions) error {
 			errC := make(chan error)
 
 			rt.ops <- func() {
@@ -175,7 +198,7 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op k8
 		}
 	}
 
-	rt.Client().RegisterControllerOperator(typeName, op)
+	rt.Client().RegisterControllerOperator(typeName, k8sOp)
 }
 
 func (rt *runtime) Client() *k8s.Client {

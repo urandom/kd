@@ -84,6 +84,7 @@
     kd.RegisterControllerOperator("ConfigMap", {
         "Factory": configMap.controllerFactory.bind(configMap),
         "List": configMap.list.bind(configMap),
+        "Watch": configMap.watch.bind(configMap),
         "Update": configMap.update.bind(configMap),
         "Delete": configMap.del.bind(configMap)
     })

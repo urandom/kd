@@ -32,8 +32,7 @@
     }
 
     Ingress.prototype.watch = function(c, ns, opts) {
-        //return c.ExtensionsV1beta1().Ingresses(ns).Watch(opts)
-        return null
+        return c.ExtensionsV1beta1().Ingresses(ns).Watch(opts)
     }
 
     Ingress.prototype.update = function(c, obj) {
