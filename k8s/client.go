@@ -106,7 +106,7 @@ func (c *Client) registerDefaults() {
 	c.RegisterControllerOperator(StatefulSetType, ControllerOperator{
 		Factory: func(o ObjectMetaGetter, tree PodTree) Controller {
 			if o, ok := o.(*av1.StatefulSet); ok {
-				return NewGenericCtrl(o, CategoryStatefulSet, o.Spec.Selector.MatchLabels, tree)
+				return statefulSetFactory(o, tree)
 			}
 
 			return nil
@@ -119,11 +119,11 @@ func (c *Client) registerDefaults() {
 				return nil, xerrors.Errorf("getting list for %s: %w", StatefulSetType, err)
 			}
 
-			return func(factory ControllerFactory, tree PodTree) Controllers {
+			return func(tree PodTree) Controllers {
 				controllers := make(Controllers, len(l.Items))
 
 				for i := range l.Items {
-					controllers[i] = factory(&l.Items[i], tree)
+					controllers[i] = statefulSetFactory(&l.Items[i], tree)
 				}
 
 				return controllers
@@ -150,7 +150,7 @@ func (c *Client) registerDefaults() {
 	c.RegisterControllerOperator(DeploymentType, ControllerOperator{
 		Factory: func(o ObjectMetaGetter, tree PodTree) Controller {
 			if o, ok := o.(*av1.Deployment); ok {
-				return NewGenericCtrl(o, CategoryDeployment, o.Spec.Selector.MatchLabels, tree)
+				return deploymentFactory(o, tree)
 			}
 
 			return nil
@@ -163,11 +163,11 @@ func (c *Client) registerDefaults() {
 				return nil, xerrors.Errorf("getting list for %s: %w", DeploymentType, err)
 			}
 
-			return func(factory ControllerFactory, tree PodTree) Controllers {
+			return func(tree PodTree) Controllers {
 				controllers := make(Controllers, len(l.Items))
 
 				for i := range l.Items {
-					controllers[i] = factory(&l.Items[i], tree)
+					controllers[i] = deploymentFactory(&l.Items[i], tree)
 				}
 
 				return controllers
@@ -194,7 +194,7 @@ func (c *Client) registerDefaults() {
 	c.RegisterControllerOperator(DaemonSetType, ControllerOperator{
 		Factory: func(o ObjectMetaGetter, tree PodTree) Controller {
 			if o, ok := o.(*av1.DaemonSet); ok {
-				return NewGenericCtrl(o, CategoryDaemonSet, o.Spec.Selector.MatchLabels, tree)
+				return daemonSetFactory(o, tree)
 			}
 
 			return nil
@@ -207,11 +207,11 @@ func (c *Client) registerDefaults() {
 				return nil, xerrors.Errorf("getting list for %s: %w", DaemonSetType, err)
 			}
 
-			return func(factory ControllerFactory, tree PodTree) Controllers {
+			return func(tree PodTree) Controllers {
 				controllers := make(Controllers, len(l.Items))
 
 				for i := range l.Items {
-					controllers[i] = factory(&l.Items[i], tree)
+					controllers[i] = daemonSetFactory(&l.Items[i], tree)
 				}
 
 				return controllers
@@ -238,7 +238,7 @@ func (c *Client) registerDefaults() {
 	c.RegisterControllerOperator(JobType, ControllerOperator{
 		Factory: func(o ObjectMetaGetter, tree PodTree) Controller {
 			if o, ok := o.(*bv1.Job); ok {
-				return NewGenericCtrl(o, CategoryJob, o.Spec.Selector.MatchLabels, tree)
+				return jobFactory(o, tree)
 			}
 
 			return nil
@@ -251,11 +251,11 @@ func (c *Client) registerDefaults() {
 				return nil, xerrors.Errorf("getting list for %s: %w", JobType, err)
 			}
 
-			return func(factory ControllerFactory, tree PodTree) Controllers {
+			return func(tree PodTree) Controllers {
 				controllers := make(Controllers, len(l.Items))
 
 				for i := range l.Items {
-					controllers[i] = factory(&l.Items[i], tree)
+					controllers[i] = jobFactory(&l.Items[i], tree)
 				}
 
 				return controllers
@@ -282,7 +282,7 @@ func (c *Client) registerDefaults() {
 	c.RegisterControllerOperator(CronJobType, ControllerOperator{
 		Factory: func(o ObjectMetaGetter, tree PodTree) Controller {
 			if o, ok := o.(*bv1b1.CronJob); ok {
-				return NewInheritCtrl(o, CategoryCronJob, tree)
+				return cronJobFactory(o, tree)
 			}
 
 			return nil
@@ -295,11 +295,11 @@ func (c *Client) registerDefaults() {
 				return nil, xerrors.Errorf("getting list for %s: %w", CronJobType, err)
 			}
 
-			return func(factory ControllerFactory, tree PodTree) Controllers {
+			return func(tree PodTree) Controllers {
 				controllers := make(Controllers, len(l.Items))
 
 				for i := range l.Items {
-					controllers[i] = factory(&l.Items[i], tree)
+					controllers[i] = cronJobFactory(&l.Items[i], tree)
 				}
 
 				return controllers
@@ -326,7 +326,7 @@ func (c *Client) registerDefaults() {
 	c.RegisterControllerOperator(ServiceType, ControllerOperator{
 		Factory: func(o ObjectMetaGetter, tree PodTree) Controller {
 			if o, ok := o.(*cv1.Service); ok {
-				return NewGenericCtrl(o, CategoryService, o.Spec.Selector, tree)
+				return serviceFactory(o, tree)
 			}
 
 			return nil
@@ -339,11 +339,11 @@ func (c *Client) registerDefaults() {
 				return nil, xerrors.Errorf("getting list for %s: %w", ServiceType, err)
 			}
 
-			return func(factory ControllerFactory, tree PodTree) Controllers {
+			return func(tree PodTree) Controllers {
 				controllers := make(Controllers, len(l.Items))
 
 				for i := range l.Items {
-					controllers[i] = factory(&l.Items[i], tree)
+					controllers[i] = serviceFactory(&l.Items[i], tree)
 				}
 
 				return controllers
@@ -366,4 +366,28 @@ func (c *Client) registerDefaults() {
 			return err
 		},
 	})
+}
+
+func statefulSetFactory(o *av1.StatefulSet, tree PodTree) Controller {
+	return NewGenericCtrl(o, CategoryStatefulSet, o.Spec.Selector.MatchLabels, tree)
+}
+
+func deploymentFactory(o *av1.Deployment, tree PodTree) Controller {
+	return NewGenericCtrl(o, CategoryDeployment, o.Spec.Selector.MatchLabels, tree)
+}
+
+func daemonSetFactory(o *av1.DaemonSet, tree PodTree) Controller {
+	return NewGenericCtrl(o, CategoryDaemonSet, o.Spec.Selector.MatchLabels, tree)
+}
+
+func jobFactory(o *bv1.Job, tree PodTree) Controller {
+	return NewGenericCtrl(o, CategoryJob, o.Spec.Selector.MatchLabels, tree)
+}
+
+func cronJobFactory(o *bv1b1.CronJob, tree PodTree) Controller {
+	return NewInheritCtrl(o, CategoryCronJob, tree)
+}
+
+func serviceFactory(o *cv1.Service, tree PodTree) Controller {
+	return NewGenericCtrl(o, CategoryService, o.Spec.Selector, tree)
 }

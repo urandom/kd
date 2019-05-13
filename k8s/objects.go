@@ -67,7 +67,7 @@ type ControllerOperator struct {
 }
 
 type ControllerFactory func(o ObjectMetaGetter, tree PodTree) Controller
-type ControllerGenerator func(factory ControllerFactory, tree PodTree) Controllers
+type ControllerGenerator func(tree PodTree) Controllers
 type ControllerList func(c ClientSet, ns string, opts meta.ListOptions) (
 	ControllerGenerator, error,
 )
@@ -276,7 +276,10 @@ func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodW
 		if w, err = op.Watch(c, nsName, meta.ListOptions{}); err != nil {
 			return nil, err
 		}
-		watchers = append(watchers, w)
+
+		if w != nil {
+			watchers = append(watchers, w)
+		}
 	}
 
 	tree, err := c.PodTree(nsName)
@@ -380,10 +383,10 @@ func (c *Client) PodTree(nsName string) (PodTree, error) {
 	genMap := <-genMapC
 	for _, t := range types {
 		gen := genMap[t]
-		factory := c.controllerOperators[t].Factory
-		if factory != nil {
-			tree.Controllers = append(tree.Controllers, gen(factory, tree)...)
+		if gen == nil {
+			continue
 		}
+		tree.Controllers = append(tree.Controllers, gen(tree)...)
 	}
 
 	return tree, nil

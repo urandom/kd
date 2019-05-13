@@ -40,6 +40,27 @@
         kd.Display(config)
     }
 
+    ConfigMap.prototype.controllerFactory = function(obj, podTree) {
+        return GenericCtrl(obj, "Config Map", {}, podTree)
+    }
+
+    ConfigMap.prototype.list = function(c, ns, opts) {
+        var list = c.CoreV1().ConfigMaps(ns).List(opts)
+        return function(tree) {
+            controllers = []
+
+            list.Items.forEach(function(item) {
+                controllers.push(this.controllerFactory(ptr(item), tree))
+            }.bind(this))
+
+            return controllers
+        }.bind(this)
+    }
+
+    ConfigMap.prototype.watch = function(c, ns, opts) {
+        return c.CoreV1().ConfigMaps(ns).Watch(opts)
+    }
+
     ConfigMap.prototype.update = function(c, obj) {
         c.CoreV1().ConfigMaps(obj.Namespace).Update(obj)
     }
@@ -61,6 +82,8 @@
 
     // Register callbacks that deal with object operation of a certain type
     kd.RegisterControllerOperator("ConfigMap", {
+        "Factory": configMap.controllerFactory.bind(configMap),
+        "List": configMap.list.bind(configMap),
         "Update": configMap.update.bind(configMap),
         "Delete": configMap.del.bind(configMap)
     })

@@ -3,6 +3,7 @@ package ext
 import (
 	"fmt"
 	"log"
+	"reflect"
 	"sort"
 
 	"github.com/dop251/goja"
@@ -111,10 +112,10 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op k8
 
 				var normGen k8s.ControllerGenerator
 				if gen != nil {
-					normGen = func(factory k8s.ControllerFactory, tree k8s.PodTree) k8s.Controllers {
+					normGen = func(tree k8s.PodTree) k8s.Controllers {
 						controllersC := make(chan k8s.Controllers)
 						rt.ops <- func() {
-							controllersC <- gen(factory, tree)
+							controllersC <- gen(tree)
 						}
 
 						return <-controllersC
@@ -196,6 +197,13 @@ func (rt *runtime) SetData() {
 			return ""
 		}
 		return *s
+	})
+	rt.vm.Set("ptr", func(o interface{}) interface{} {
+		v := reflect.ValueOf(o)
+		vp := reflect.New(v.Type())
+		vp.Elem().Set(v)
+
+		return vp.Interface()
 	})
 	rt.vm.Set("GenericCtrl", k8s.NewGenericCtrl)
 }
