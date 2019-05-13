@@ -85,7 +85,7 @@ func (rt *runtime) RegisterObjectSummaryProvider(typeName string, provider func(
 }
 
 type ControllerOperator struct {
-	Factory k8s.ControllerFactory
+	Factory func(goja.FunctionCall) goja.Value
 	List    k8s.ControllerList
 	Watch   func(goja.FunctionCall) goja.Value
 	Update  k8s.ControllerUpdate
@@ -100,7 +100,22 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op Co
 			ctrlC := make(chan k8s.Controller)
 
 			rt.ops <- func() {
-				ctrlC <- factory(o, tree)
+				defer func() {
+					if err := recover(); err != nil {
+						log.Println("Error during controller factory:", err)
+						ctrlC <- nil
+					}
+				}()
+				val := factory(goja.FunctionCall{Arguments: []goja.Value{
+					rt.vm.ToValue(o),
+					rt.vm.ToValue(tree),
+				}})
+
+				if ctrl, ok := val.Export().(k8s.Controller); ok {
+					ctrlC <- ctrl
+				} else {
+					ctrlC <- nil
+				}
 			}
 
 			return <-ctrlC

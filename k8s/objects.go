@@ -87,6 +87,9 @@ const (
 )
 
 func (c Category) Plural() string {
+	if strings.HasSuffix(string(c), "s") {
+		return string(c)
+	}
 	return string(c) + "s"
 }
 
@@ -529,15 +532,14 @@ func (c *Client) selectFromWatchers(
 					factory = op.Factory
 				}
 				c.mu.RUnlock()
-				if factory == nil {
+				if ev.Type == watch.Deleted {
+					factory = nil
+				} else if factory == nil {
 					log.Printf("Factory function for type %s missing", typeName)
 					continue
 				}
 
-				tree.Controllers = modifyControllerList(tree.Controllers, o,
-					func() Controller {
-						return factory(o, tree)
-					})
+				tree.Controllers = modifyControllerList(tree.Controllers, o, factory, tree)
 
 				agg <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 			}
@@ -618,27 +620,30 @@ func modifyPodInList(pods Pods, pod *cv1.Pod, delete bool, labels map[string]str
 	return pods
 }
 
-func modifyControllerList(controllers Controllers, o ObjectMetaGetter, factory func() Controller) Controllers {
+func modifyControllerList(controllers Controllers, o ObjectMetaGetter, factory ControllerFactory, tree PodTree) Controllers {
 	found := false
 	for i := range controllers {
 		if controllers[i].GetObjectMeta().GetUID() == o.GetObjectMeta().GetUID() {
 			if factory == nil {
+				// Delete the controller from the list
 				copy(controllers[i:], controllers[i+1:])
 				controllers[len(controllers)-1] = nil
 				controllers = controllers[:len(controllers)-1]
 			} else {
-				controller := factory()
+				// Overwrite the controller
+				controller := factory(o, tree)
 				if controller != nil {
 					controllers[i] = controller
 				}
 			}
+			found = true
+			break
 		}
-		found = true
-		break
 	}
 
 	if !found && factory != nil {
-		controller := factory()
+		// Insert a new controller in the list
+		controller := factory(o, tree)
 		if controller == nil {
 			return controllers
 		}

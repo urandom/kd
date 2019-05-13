@@ -166,6 +166,7 @@ func (p *Pods) populatePods(ns string) error {
 				p.ui.App.QueueUpdateDraw(func() {
 					podTree := podWatcherEvent.Tree
 
+					// Build a dual-level controller representation
 					controllers := [][]k8s.Controller{}
 					i := -1
 					for _, c := range podTree.Controllers {
