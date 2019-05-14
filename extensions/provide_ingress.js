@@ -1,7 +1,5 @@
 (function() {
     function Ingress() {
-        this.namespace = "";
-        this.names = [];
     }
 
     Ingress.prototype.controllerFactory = function(obj, podTree) {
@@ -54,7 +52,35 @@
     }
 
     Ingress.prototype.summary = function(obj) {
-        return sprintf("[skyblue::b]Data:[white::-] %d\n", Object.keys(obj.Data).length)
+        var summary = sprintf("[skyblue::b]Rules:[white::-] %d\n", Object.keys(obj.Spec.Rules).length)
+        var hosts = []
+        var paths = []
+        var ports = []
+
+        obj.Spec.Rules.forEach(function(rule) {
+            hosts.push(rule.Host)
+            if (rule.HTTP) {
+                rule.HTTP.Paths.forEach(function(path) {
+                    paths.push(path.Path)
+                    if (path.Backend.ServicePort.StrVal != "") {
+                        ports.push(path.Backend.ServicePort.StrVal)
+                    } else if (path.Backend.ServicePort.IntVal > 0) {
+                        ports.push(path.Backend.ServicePort.IntVal)
+                    }
+                })
+            }
+        })
+        if (hosts.length) {
+            summary += sprintf("[skyblue::b]Hosts:[white::-] %s\n", hosts.join(", "))
+        }
+        if (paths.length) {
+            summary += sprintf("[skyblue::b]Paths:[white::-] %s\n", paths.join(", "))
+        }
+        if (ports.length) {
+            summary += sprintf("[skyblue::b]Ports:[white::-] %s\n", ports.join(", "))
+        }
+
+        return summary
     }
 
     var ingress = new Ingress()
