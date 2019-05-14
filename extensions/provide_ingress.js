@@ -5,10 +5,20 @@
     }
 
     Ingress.prototype.controllerFactory = function(obj, podTree) {
-        var svcName = obj.Spec.Backend.ServiceName
         var selector = {}
+        var svcNames = []
+        if (obj.Spec.Backend) {
+            svcNames.push(obj.Spec.Backend.ServiceName)
+        }
+        obj.Spec.Rules.forEach(function(rule) {
+            if (rule.HTTP) {
+                rule.HTTP.Paths.forEach(function(path) {
+                    svcNames.push(path.Backend.ServiceName)
+                })
+            }
+        })
         podTree.Controllers.forEach(function(controller) {
-            if (controller.Category() == "Service" && controller.GetObjectMeta().GetName() == svcName) {
+            if (controller.Category() == "Service" && svcNames.indexOf(controller.GetObjectMeta().GetName()) != -1) {
                 svcSelector = controller.Selector()
                 Object.keys(svcSelector).forEach(function(key) {
                     selector[key] = svcSelector[key]
