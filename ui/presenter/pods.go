@@ -351,7 +351,7 @@ func (p *Pods) initKeybindings() {
 				return nil
 			}
 		case tcell.KeyF3:
-			if p.state.object != nil {
+			if c, ok := p.state.object.(k8s.Controller); !ok || len(c.Pods()) > 0 {
 				go func() {
 					p.state.details = detailsLog
 					p.showObject(p.state.object)
@@ -436,7 +436,9 @@ func (p *Pods) setupButtons() {
 	if p.state.object != nil {
 		p.ui.ActionBar.AddAction(1, "Details")
 		p.ui.ActionBar.AddAction(2, "Events")
-		p.ui.ActionBar.AddAction(3, "Logs")
+		if c, ok := p.state.object.(k8s.Controller); !ok || len(c.Pods()) > 0 {
+			p.ui.ActionBar.AddAction(3, "Logs")
+		}
 		switch p.state.details {
 		case detailsObject:
 			p.ui.ActionBar.AddAction(4, "Edit")
