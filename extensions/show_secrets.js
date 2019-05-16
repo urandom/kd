@@ -6,7 +6,7 @@
     }
 
     Secrets.prototype.onObjectSelected = function(obj) {
-        if (sprintf("%T", obj).split(".")[1] == "Pod") {
+        if (objectType(obj) == "Pod") {
             this.names = [];
             obj.Spec.Volumes.forEach(function(vol) {
                 if (vol.Secret != null) {
@@ -21,7 +21,7 @@
             this.namespace = obj.Namespace
 
             return {"Label": "Secret", "Callback": this.actionCallback.bind(this)}
-        } else if (sprintf("%T", obj).split(".")[1] == "Secret") {
+        } else if (objectType(obj) == "Secret") {
             this.secrets = obj.Data
 
             if (!Object.keys(this.secrets).length) {

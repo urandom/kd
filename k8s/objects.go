@@ -410,7 +410,7 @@ func (c *Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 
 		*v = *update
 	default:
-		typeName := strings.Split(fmt.Sprintf("%T", object), ".")[1]
+		typeName := ObjectType(object)
 		c.mu.RLock()
 
 		op, ok := c.controllerOperators[ControllerType(typeName)]
@@ -455,7 +455,7 @@ func (c *Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) er
 			}
 		}
 	default:
-		typeName := strings.Split(fmt.Sprintf("%T", object), ".")[1]
+		typeName := ObjectType(object)
 		c.mu.RLock()
 
 		op, ok := c.controllerOperators[ControllerType(typeName)]
@@ -524,7 +524,7 @@ func (c *Client) selectFromWatchers(
 				modifyPodInTree(&tree, o, ev.Type == watch.Deleted)
 				agg <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 			case ObjectMetaGetter:
-				typeName := strings.Split(fmt.Sprintf("%T", o), ".")[1]
+				typeName := ObjectType(o)
 				var factory ControllerFactory
 
 				c.mu.RLock()
@@ -546,6 +546,15 @@ func (c *Client) selectFromWatchers(
 		}
 	}
 }
+
+func ObjectType(o interface{}) string {
+	if c, ok := o.(Controller); ok {
+		o = c.Controller()
+	}
+
+	return strings.Split(fmt.Sprintf("%T", o), ".")[1]
+}
+
 func matchPods(pods Pods, selector map[string]string) Pods {
 	if len(selector) == 0 {
 		return nil

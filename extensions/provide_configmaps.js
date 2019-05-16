@@ -5,7 +5,7 @@
     }
 
     ConfigMap.prototype.onObjectSelected = function(obj) {
-        if (sprintf("%T", obj).split(".")[1] != "Pod") {
+        if (objectType(obj) != "Pod") {
             return null
         }
         this.names = [];

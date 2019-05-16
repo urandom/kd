@@ -459,7 +459,11 @@ func (p *Pods) setupButtons() {
 	if p.state.object != nil && len(p.selectedActions) > 0 {
 		p.selectedActionsData = make(ext.ObjectSelectedDataSlice, 0, len(p.selectedActions))
 		for _, action := range p.selectedActions {
-			data, err := action(p.state.object)
+			obj := p.state.object
+			if c, ok := obj.(k8s.Controller); ok {
+				obj = c.Controller()
+			}
+			data, err := action(obj)
 			if p.DisplayError(err) {
 				return
 			}

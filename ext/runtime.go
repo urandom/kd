@@ -244,6 +244,7 @@ func (rt *runtime) SetData() {
 		return vp.Interface()
 	})
 	rt.vm.Set("GenericCtrl", k8s.NewGenericCtrl)
+	rt.vm.Set("objectType", k8s.ObjectType)
 }
 
 func (rt *runtime) ToYAML(v interface{}) (string, error) {

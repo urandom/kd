@@ -4,8 +4,12 @@
     }
 
     PV.prototype.onObjectSelected = function(obj) {
-        if (sprintf("%T", obj).split(".")[1] == "PersistentVolumeClaim") {
-            this.names = [obj.Spec.VolumeName];
+        if (objectType(obj) == "PersistentVolumeClaim") {
+            this.names = []
+
+            if (obj.Spec.VolumeName) {
+                this.names.push(obj.Spec.VolumeName)
+            }
 
             if (!this.names.length) {
                 return null

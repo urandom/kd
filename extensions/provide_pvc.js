@@ -5,7 +5,7 @@
     }
 
     PVC.prototype.onObjectSelected = function(obj) {
-        if (sprintf("%T", obj).split(".")[1] == "Pod") {
+        if (objectType(obj) == "Pod") {
             this.names = [];
             obj.Spec.Volumes.forEach(function(vol) {
                 if (vol.PersistentVolumeClaim != null) {
@@ -41,6 +41,27 @@
         kd.Display(secret)
     }
 
+    PVC.prototype.controllerFactory = function(obj, podTree) {
+        return GenericCtrl(obj, "Persistent Volume Claim", {}, podTree)
+    }
+
+    PVC.prototype.list = function(c, ns, opts) {
+        var list = c.CoreV1().PersistentVolumeClaims(ns).List(opts)
+        return function(tree) {
+            controllers = []
+
+            list.Items.forEach(function(item) {
+                controllers.push(this.controllerFactory(ptr(item), tree))
+            }.bind(this))
+
+            return controllers
+        }.bind(this)
+    }
+
+    PVC.prototype.watch = function(c, ns, opts) {
+        return c.CoreV1().PersistentVolumeClaims(ns).Watch(opts)
+    }
+
     PVC.prototype.update = function(c, obj) {
         c.CoreV1().PersistentVolumeClaims(obj.Namespace).Update(obj)
     }
@@ -71,6 +92,9 @@
 
     // Register callbacks that deal with object operation of a certain type
     kd.RegisterControllerOperator("PersistentVolumeClaim", {
+        "Factory": pvc.controllerFactory.bind(pvc),
+        "List": pvc.list.bind(pvc),
+        "Watch": pvc.watch.bind(pvc),
         "Update": pvc.update.bind(pvc),
         "Delete": pvc.del.bind(pvc)
     })

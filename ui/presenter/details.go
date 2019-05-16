@@ -65,7 +65,7 @@ func (p *Details) show(object k8s.ObjectMetaGetter) tview.Primitive {
 }
 
 func (p *Details) printObjectSummary(w io.Writer, object k8s.ObjectMetaGetter) {
-	typeName := strings.Split(fmt.Sprintf("%T", object), ".")[1]
+	typeName := k8s.ObjectType(object)
 	fmt.Fprintf(w, "[lightgreen::b]%s: [white::-]%s\n", typeName, object.GetObjectMeta().GetName())
 
 	if object.GetObjectMeta().GetDeletionTimestamp() != nil {
