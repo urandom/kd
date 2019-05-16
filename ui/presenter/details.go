@@ -95,7 +95,9 @@ func (p *Details) printObjectSummary(w io.Writer, object k8s.ObjectMetaGetter) {
 		if !lastRestart.IsZero() {
 			fmt.Fprintf(w, "[skyblue::b]\tLast restart:[white::-] %s\n", duration.HumanDuration(time.Since(lastRestart)))
 		}
-		fmt.Fprintf(w, "[skyblue::b]Age:[white::-] %s\n", duration.HumanDuration(time.Since(v.Status.StartTime.Time)))
+		if v.Status.StartTime != nil {
+			fmt.Fprintf(w, "[skyblue::b]Age:[white::-] %s\n", duration.HumanDuration(time.Since(v.Status.StartTime.Time)))
+		}
 	case *av1.StatefulSet:
 		replicas := v.Status.Replicas
 		fmt.Fprintf(w, "[skyblue::b]Ready:[white::-] %d/%d\n", v.Status.ReadyReplicas, replicas)
