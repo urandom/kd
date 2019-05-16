@@ -186,7 +186,7 @@ func (p *Pods) populatePods(ns string) error {
 					for i, c := range controllers {
 						var clsNode *tview.TreeNode
 						for _, node := range root.GetChildren() {
-							if i == node.GetReference() {
+							if c[0].Category() == node.GetReference() {
 								if len(c) == 0 {
 									// Category is empty, remove the class node
 									break
@@ -202,7 +202,7 @@ func (p *Pods) populatePods(ns string) error {
 							clsNode = tview.NewTreeNode(controllers[i][0].Category().Plural()).
 								SetSelectable(true).
 								SetColor(tcell.ColorCoral).
-								SetReference(i)
+								SetReference(controllers[i][0].Category())
 						}
 
 						if clsNode == nil {
@@ -274,7 +274,7 @@ func (p *Pods) populatePods(ns string) error {
 
 	p.ui.PodsTree.SetSelectedFunc(func(node *tview.TreeNode) {
 		ref := node.GetReference()
-		if _, ok := ref.(int); ok {
+		if _, ok := ref.(k8s.Category); ok {
 			node.SetExpanded(!node.IsExpanded())
 			return
 		}
