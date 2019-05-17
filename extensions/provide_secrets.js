@@ -63,6 +63,27 @@
         kd.Display(this.secrets[key])
     }
 
+    Secrets.prototype.controllerFactory = function(obj, podTree) {
+        return GenericCtrl(obj, "Secret", {}, podTree)
+    }
+
+    Secrets.prototype.list = function(c, ns, opts) {
+        var list = c.CoreV1().Secrets(ns).List(opts)
+        return function(tree) {
+            controllers = []
+
+            list.Items.forEach(function(item) {
+                controllers.push(this.controllerFactory(ptr(item), tree))
+            }.bind(this))
+
+            return controllers
+        }.bind(this)
+    }
+
+    Secrets.prototype.watch = function(c, ns, opts) {
+        return c.CoreV1().Secrets(ns).Watch(opts)
+    }
+
     Secrets.prototype.update = function(c, obj) {
         c.CoreV1().Secrets(obj.Namespace).Update(obj)
     }
@@ -88,6 +109,9 @@
 
     // Register callbacks that deal with object operation of a certain type
     kd.RegisterControllerOperator("Secret", {
+        "Factory": secrets.controllerFactory.bind(secrets),
+        "List": secrets.list.bind(secrets),
+        "Watch": secrets.watch.bind(secrets),
         "Update": secrets.update.bind(secrets),
         "Delete": secrets.del.bind(secrets)
     })
