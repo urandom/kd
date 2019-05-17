@@ -177,6 +177,7 @@ func (p *Pods) populatePods(ns string) error {
 
 						controllers[i] = append(controllers[i], c)
 					}
+					names := map[string]struct{}{}
 
 					log.Printf("Updating tree view with pods for namespaces %s", ns)
 					p.state.namespace = ns
@@ -211,18 +212,18 @@ func (p *Pods) populatePods(ns string) error {
 
 						conNodes := make([]*tview.TreeNode, 0, len(c))
 						for _, controller := range c {
-							conName := controller.Controller().GetObjectMeta().GetName()
+							conName := controller.GetObjectMeta().GetName()
+							uid := controller.GetObjectMeta().GetUID()
 							var conNode *tview.TreeNode
 							for _, node := range clsNode.GetChildren() {
 								ref := node.GetReference().(k8s.Controller)
-								if conName == ref.Controller().GetObjectMeta().GetName() {
-
+								if uid == ref.GetObjectMeta().GetUID() {
 									podNodes := make([]*tview.TreeNode, 0, len(controller.Pods()))
 									for _, pod := range controller.Pods() {
 										var podNode *tview.TreeNode
 										for _, pNode := range node.GetChildren() {
 											podRef := pNode.GetReference().(*cv1.Pod)
-											if podRef.GetName() == pod.GetName() {
+											if podRef.GetUID() == pod.GetUID() {
 												podNode = pNode
 												podNode.SetReference(pod)
 												break
@@ -230,7 +231,12 @@ func (p *Pods) populatePods(ns string) error {
 										}
 
 										if podNode == nil {
-											podNode = tview.NewTreeNode(pod.GetObjectMeta().GetName()).
+											name := pod.GetName()
+											if _, present := names[name]; present {
+												name = pod.GetNamespace() + "/" + name
+											}
+											names[name] = struct{}{}
+											podNode = tview.NewTreeNode(name).
 												SetReference(pod).SetSelectable(true)
 										}
 
@@ -244,8 +250,14 @@ func (p *Pods) populatePods(ns string) error {
 								}
 							}
 
+							// controller not found
 							if conNode == nil {
-								// controller not found
+								// Ensure somewhat unique names
+								if _, present := names[conName]; present {
+									conName = controller.GetObjectMeta().GetNamespace() + "/" + conName
+								}
+								names[conName] = struct{}{}
+
 								conNode = tview.NewTreeNode(conName).
 									SetReference(controller).SetSelectable(true)
 								for _, pod := range controller.Pods() {
