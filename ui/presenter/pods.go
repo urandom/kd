@@ -177,7 +177,6 @@ func (p *Pods) populatePods(ns string) error {
 
 						controllers[i] = append(controllers[i], c)
 					}
-					names := map[string]struct{}{}
 
 					log.Printf("Updating tree view with pods for namespaces %s", ns)
 					p.state.namespace = ns
@@ -185,6 +184,7 @@ func (p *Pods) populatePods(ns string) error {
 					root := p.ui.PodsTree.GetRoot()
 					clsNodes := make([]*tview.TreeNode, 0, len(controllers))
 					for i, c := range controllers {
+						names := map[string]struct{}{}
 						var clsNode *tview.TreeNode
 						for _, node := range root.GetChildren() {
 							if c[0].Category() == node.GetReference() {
