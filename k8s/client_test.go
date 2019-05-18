@@ -7,6 +7,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	"github.com/urandom/kd/k8s"
+	"github.com/urandom/kd/k8s/mock"
 	cv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -29,9 +30,9 @@ func TestClient_Namespaces(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			clientset := NewMockClientSet(ctrl)
-			corev1 := NewMockCoreV1Interface(ctrl)
-			ns := NewMockNamespaceInterface(ctrl)
+			clientset := mock.NewMockClientSet(ctrl)
+			corev1 := mock.NewMockCoreV1Interface(ctrl)
+			ns := mock.NewMockNamespaceInterface(ctrl)
 
 			clientset.EXPECT().CoreV1().Return(corev1)
 			corev1.EXPECT().Namespaces().Return(ns)
@@ -68,11 +69,11 @@ func TestClient_Events(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			obj := NewMockObjectMetaGetter(ctrl)
-			clientset := NewMockClientSet(ctrl)
-			corev1 := NewMockCoreV1Interface(ctrl)
-			event := NewMockEventInterface(ctrl)
-			selector := NewMockSelector(ctrl)
+			obj := mock.NewMockObjectMetaGetter(ctrl)
+			clientset := mock.NewMockClientSet(ctrl)
+			corev1 := mock.NewMockCoreV1Interface(ctrl)
+			event := mock.NewMockEventInterface(ctrl)
+			selector := mock.NewMockSelector(ctrl)
 
 			obj.EXPECT().GetObjectMeta().AnyTimes().Return(&metav1.ObjectMeta{})
 			clientset.EXPECT().CoreV1().Return(corev1)
