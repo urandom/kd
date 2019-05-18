@@ -60,12 +60,16 @@ func New(configPath string) (*Client, error) {
 		return nil, xerrors.Errorf("creating k8s clientset: %w", err)
 	}
 
+	return NewFromClientSet(clientset), nil
+}
+
+func NewFromClientSet(clientset ClientSet) *Client {
 	client := &Client{controllerOperators: ControllerOperators{}}
 	client.ClientSet = clientset
 
 	client.registerDefaults()
 
-	return client, nil
+	return client
 }
 
 func (c *Client) Namespaces() ([]string, error) {
@@ -83,17 +87,17 @@ func (c *Client) Namespaces() ([]string, error) {
 	return namespaces, nil
 }
 
-func (c *Client) Events(obj meta.Object) ([]cv1.Event, error) {
-	name, ns := obj.GetName(), obj.GetNamespace()
+func (c *Client) Events(obj ObjectMetaGetter) ([]cv1.Event, error) {
+	name, ns := obj.GetObjectMeta().GetName(), obj.GetObjectMeta().GetNamespace()
 	core := c.CoreV1()
 	events := core.Events(ns)
 	selector := events.GetFieldSelector(&name, &ns, nil, nil)
 	opts := meta.ListOptions{FieldSelector: selector.String()}
 	list, err := events.List(opts)
 	if err != nil {
-		err = xerrors.Errorf("getting list of events for object %s: %w", name, err)
+		return nil, xerrors.Errorf("getting list of events for object %s: %w", name, err)
 	}
-	return list.Items, err
+	return list.Items, nil
 }
 
 func (c *Client) RegisterControllerOperator(kind ControllerType, op ControllerOperator) {

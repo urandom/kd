@@ -32,7 +32,7 @@ func (p *Events) show(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
 	p.ui.StatusBar.SpinText("Loading events")
 	defer p.ui.StatusBar.StopSpin()
 
-	list, err := p.client.Events(meta)
+	list, err := p.client.Events(object)
 	if err != nil {
 		log.Printf("Error getting events for object %s: %s", meta.GetName(), err)
 		return p.ui.PodEvents, UserRetryableError{err, func() error {
