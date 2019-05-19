@@ -193,6 +193,10 @@ func NewInheritCtrl(o ObjectMetaGetter, category Category, tree PodTree) *Ctrl {
 	return &Ctrl{o, category, selector, matchPods(tree.pods, selector)}
 }
 
+func NewCtrlWithPods(o ObjectMetaGetter, category Category, selector Selector, pods Pods) *Ctrl {
+	return &Ctrl{o, category, selector, pods}
+}
+
 func (c *Ctrl) Controller() ObjectMetaGetter {
 	return c.ObjectMetaGetter
 }

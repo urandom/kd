@@ -12,11 +12,10 @@ import (
 
 func TestClient_ScaleDeployment(t *testing.T) {
 	tests := []struct {
-		name     string
-		obj      k8s.ObjectMetaGetter
-		replicas int
-		err      error
-		wantErr  bool
+		name    string
+		obj     k8s.ObjectMetaGetter
+		err     error
+		wantErr bool
 	}{
 		{name: "not a deployment", obj: &av1.StatefulSet{}, wantErr: true},
 		{name: "scale err", obj: &av1.Deployment{}, err: errors.New("err"), wantErr: true},
@@ -37,7 +36,7 @@ func TestClient_ScaleDeployment(t *testing.T) {
 
 			c := k8s.NewFromClientSet(clientset)
 			if err := c.ScaleDeployment(
-				k8s.NewGenericCtrl(tt.obj, "", nil, k8s.PodTree{}), tt.replicas,
+				k8s.NewGenericCtrl(tt.obj, "", nil, k8s.PodTree{}), 2,
 			); (err != nil) != tt.wantErr {
 				t.Errorf("Client.ScaleDeployment() error = %v, wantErr %v", err, tt.wantErr)
 			}
