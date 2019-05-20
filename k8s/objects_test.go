@@ -13,6 +13,7 @@ import (
 	bv1 "k8s.io/api/batch/v1"
 	bv1b1 "k8s.io/api/batch/v1beta1"
 	cv1 "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestClient_PodTreeWatcher(t *testing.T) {
@@ -48,6 +49,32 @@ func TestClient_PodTreeWatcher(t *testing.T) {
 }
 
 func TestClient_PodTree(t *testing.T) {
+	pods := []cv1.Pod{
+		{ObjectMeta: meta.ObjectMeta{Name: "p1", Labels: map[string]string{"app": "p"}}},
+		{ObjectMeta: meta.ObjectMeta{Name: "p2", Labels: map[string]string{"app": "p"}}},
+		{ObjectMeta: meta.ObjectMeta{Name: "k1", Labels: map[string]string{"app": "k"}}},
+	}
+	statefulset := av1.StatefulSet{
+		ObjectMeta: meta.ObjectMeta{Name: "p"}, Spec: av1.StatefulSetSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "p"}},
+		}}
+	deployment := av1.Deployment{
+		ObjectMeta: meta.ObjectMeta{Name: "p"}, Spec: av1.DeploymentSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "p"}},
+		}}
+	daemonset := av1.DaemonSet{
+		ObjectMeta: meta.ObjectMeta{Name: "p"}, Spec: av1.DaemonSetSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "k"}},
+		}}
+	job := bv1.Job{
+		ObjectMeta: meta.ObjectMeta{Name: "p", OwnerReferences: []meta.OwnerReference{{UID: "cronjob"}}}, Spec: bv1.JobSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "p"}},
+		}}
+	cronjob := bv1b1.CronJob{ObjectMeta: meta.ObjectMeta{Name: "p", UID: "cronjob"}}
+	service := cv1.Service{
+		ObjectMeta: meta.ObjectMeta{Name: "p"}, Spec: cv1.ServiceSpec{
+			Selector: map[string]string{"app": "k"},
+		}}
 	tests := []struct {
 		name            string
 		nsName          string
@@ -69,6 +96,78 @@ func TestClient_PodTree(t *testing.T) {
 		wantErr         bool
 	}{
 		{name: "post list error", podErr: errors.New("pod err"), wantErr: true},
+		{name: "statefulset list error", statefulSetErr: errors.New("pod err"), wantErr: true},
+		{name: "deployment list error", deploymentErr: errors.New("pod err"), wantErr: true},
+		{name: "daemonset list error", daemonSetErr: errors.New("pod err"), wantErr: true},
+		{name: "job list error", jobErr: errors.New("pod err"), wantErr: true},
+		{name: "cronJob list error", cronJobErr: errors.New("pod err"), wantErr: true},
+		{name: "service list error", serviceErr: errors.New("pod err"), wantErr: true},
+		{name: "stateful set", podList: cv1.PodList{Items: pods},
+			statefulSetList: av1.StatefulSetList{Items: []av1.StatefulSet{statefulset}},
+			want: k8s.Controllers{k8s.NewCtrlWithPods(
+				&statefulset, k8s.CategoryStatefulSet,
+				statefulset.Spec.Selector.MatchLabels, k8s.Pods{}.AddSlice(pods[:2]),
+			)},
+		},
+		{name: "deployment", podList: cv1.PodList{Items: pods},
+			deploymentList: av1.DeploymentList{Items: []av1.Deployment{deployment}},
+			want: k8s.Controllers{k8s.NewCtrlWithPods(
+				&deployment, k8s.CategoryDeployment,
+				deployment.Spec.Selector.MatchLabels, k8s.Pods{}.AddSlice(pods[:2]),
+			)},
+		},
+		{name: "daemon set", podList: cv1.PodList{Items: pods},
+			daemonSetList: av1.DaemonSetList{Items: []av1.DaemonSet{daemonset}},
+			want: k8s.Controllers{k8s.NewCtrlWithPods(
+				&daemonset, k8s.CategoryDaemonSet,
+				daemonset.Spec.Selector.MatchLabels, k8s.Pods{}.AddSlice(pods[2:]),
+			)},
+		},
+		{name: "job", podList: cv1.PodList{Items: pods},
+			jobList: bv1.JobList{Items: []bv1.Job{job}},
+			want: k8s.Controllers{k8s.NewCtrlWithPods(
+				&job, k8s.CategoryJob,
+				job.Spec.Selector.MatchLabels, k8s.Pods{}.AddSlice(pods[:2]),
+			)},
+		},
+		{name: "job + cronjob", podList: cv1.PodList{Items: pods},
+			jobList:     bv1.JobList{Items: []bv1.Job{job}},
+			cronJobList: bv1b1.CronJobList{Items: []bv1b1.CronJob{cronjob}},
+			want: k8s.Controllers{
+				k8s.NewCtrlWithPods(
+					&job, k8s.CategoryJob,
+					job.Spec.Selector.MatchLabels, k8s.Pods{}.AddSlice(pods[:2]),
+				),
+				k8s.NewCtrlWithPods(
+					&cronjob, k8s.CategoryCronJob,
+					map[string]string{"app": "p"}, k8s.Pods{}.AddSlice(pods[:2]),
+				)},
+		},
+		{name: "service", podList: cv1.PodList{Items: pods},
+			serviceList: cv1.ServiceList{Items: []cv1.Service{service}},
+			want: k8s.Controllers{k8s.NewCtrlWithPods(
+				&service, k8s.CategoryService,
+				service.Spec.Selector, k8s.Pods{}.AddSlice(pods[2:]),
+			)},
+		},
+		{name: "deployment, daemonset, service", podList: cv1.PodList{Items: pods},
+			deploymentList: av1.DeploymentList{Items: []av1.Deployment{deployment}},
+			daemonSetList:  av1.DaemonSetList{Items: []av1.DaemonSet{daemonset}},
+			serviceList:    cv1.ServiceList{Items: []cv1.Service{service}},
+			want: k8s.Controllers{
+				k8s.NewCtrlWithPods(
+					&deployment, k8s.CategoryDeployment,
+					deployment.Spec.Selector.MatchLabels, k8s.Pods{}.AddSlice(pods[:2]),
+				),
+				k8s.NewCtrlWithPods(
+					&daemonset, k8s.CategoryDaemonSet,
+					daemonset.Spec.Selector.MatchLabels, k8s.Pods{}.AddSlice(pods[2:]),
+				),
+				k8s.NewCtrlWithPods(
+					&service, k8s.CategoryService,
+					service.Spec.Selector, k8s.Pods{}.AddSlice(pods[2:]),
+				)},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

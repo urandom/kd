@@ -30,6 +30,14 @@ func (e UnsupportedObjectError) Error() string {
 
 type Pods []*cv1.Pod
 
+func (p Pods) AddSlice(pods []cv1.Pod) Pods {
+	for i := range pods {
+		p = append(p, &pods[i])
+	}
+
+	return p
+}
+
 type PodManager interface {
 	Pods() Pods
 	SetPods(Pods)
