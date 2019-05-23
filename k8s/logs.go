@@ -145,7 +145,6 @@ func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan logData,
 
 func readLogData(ctx context.Context, rc io.ReadCloser, data chan<- logData, prefix []byte, color []byte) {
 	defer rc.Close()
-	defer close(data)
 
 	r := bufio.NewReader(rc)
 	for {
