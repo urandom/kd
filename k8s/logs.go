@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rivo/tview"
@@ -77,6 +78,7 @@ func (c *Client) Logs(ctx context.Context, object ObjectMetaGetter, container st
 
 	go demuxLogs(ctx, writer, reader, len(pods) > 1)
 
+	var wg sync.WaitGroup
 	for i, pod := range pods {
 		name := pod.ObjectMeta.GetName()
 		req := c.CoreV1().Pods(pod.ObjectMeta.GetNamespace()).GetLogs(
@@ -93,8 +95,17 @@ func (c *Client) Logs(ctx context.Context, object ObjectMetaGetter, container st
 			prefix = name[idx+1:]
 		}
 
-		go readLogData(ctx, rc, reader, []byte(prefix), []byte(colors[i%len(colors)]))
+		wg.Add(1)
+		go func(i int) {
+			readLogData(ctx, rc, reader, []byte(prefix), []byte(colors[i%len(colors)]))
+			wg.Done()
+		}(i)
 	}
+
+	go func() {
+		wg.Wait()
+		close(reader)
+	}()
 
 	return writer, nil
 }
@@ -128,9 +139,10 @@ func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan logData,
 			writer <- buf.Bytes()
 			buf.Reset()
 			canTrigger = true
-		case data, ok := <-reader:
-			if !ok {
-				return
+		case data, open := <-reader:
+			if !open {
+				reader = nil
+				continue
 			}
 			logData = append(logData, data)
 			// Buffer the writes in a timed window to avoid having to print out

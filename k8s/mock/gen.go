@@ -22,4 +22,6 @@ package mock
 
 //go:generate mockgen -package mock -destination k8s_extensions_mock.go k8s.io/client-go/kubernetes/typed/extensions/v1beta1 ExtensionsV1beta1Interface
 
+//go:generate mockgen -package mock -destination k8s_watch_mock.go k8s.io/apimachinery/pkg/watch Interface
+
 //go:generate mockgen -package mock -destination k8s_selector_mock.go k8s.io/apimachinery/pkg/fields Selector

@@ -55,13 +55,18 @@ func (p *Log) show(ctx context.Context, object k8s.ObjectMetaGetter, container s
 		return p.ui.PodData, nil
 	}
 
+	time.AfterFunc(2*time.Second, p.ui.StatusBar.StopSpin)
+
 	go func() {
 		initial := true
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case b := <-data:
+			case b, open := <-data:
+				if !open {
+					return
+				}
 				if initial {
 					p.ui.StatusBar.StopSpin()
 					initial = false

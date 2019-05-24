@@ -17,14 +17,10 @@ import (
 )
 
 func TestClient_PodTreeWatcher(t *testing.T) {
-	type args struct {
-		ctx    context.Context
-		nsName string
-	}
 	tests := []struct {
 		name    string
-		args    args
-		want    <-chan k8s.PodWatcherEvent
+		nsName  string
+		want    []k8s.PodWatcherEvent
 		wantErr bool
 	}{
 		// TODO: Add test cases.
@@ -36,14 +32,22 @@ func TestClient_PodTreeWatcher(t *testing.T) {
 
 			clientset := mock.NewMockClientSet(ctrl)
 			c := k8s.NewFromClientSet(clientset)
-			got, err := c.PodTreeWatcher(tt.args.ctx, tt.args.nsName)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			gotC, err := c.PodTreeWatcher(ctx, tt.nsName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Client.PodTreeWatcher() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Client.PodTreeWatcher() = %v, want %v", got, tt.want)
+
+			for _, ev := range tt.want {
+				got := <-gotC
+				if !reflect.DeepEqual(got, ev) {
+					t.Errorf("Client.PodTreeWatcher() = %v, want %v", got, tt.want)
+				}
 			}
+
 		})
 	}
 }

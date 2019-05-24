@@ -363,7 +363,7 @@ func (p *Pods) initKeybindings() {
 				return nil
 			}
 		case tcell.KeyF3:
-			if c, ok := p.state.object.(k8s.Controller); !ok || len(c.Pods()) > 0 {
+			if c, ok := p.state.object.(k8s.Controller); p.state.object != nil && (!ok || len(c.Pods()) > 0) {
 				go func() {
 					p.state.details = detailsLog
 					p.showObject(p.state.object)
@@ -436,8 +436,10 @@ func (p *Pods) initKeybindings() {
 func (p *Pods) onFocused(primitive tview.Primitive) {
 	p.state.activeComponent = primitiveToComponent(primitive)
 
-	p.resetButtons()
-	p.setupButtons()
+	p.ui.App.QueueUpdate(func() {
+		p.resetButtons()
+		p.setupButtons()
+	})
 }
 
 func (p *Pods) resetButtons() {
