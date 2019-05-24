@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,7 @@ type logData struct {
 	color []byte
 	from  []byte
 	line  []byte
+	time  time.Time
 }
 
 const previousPrefix = "previous:"
@@ -82,7 +84,7 @@ func (c *Client) Logs(ctx context.Context, object ObjectMetaGetter, container st
 	for i, pod := range pods {
 		name := pod.ObjectMeta.GetName()
 		req := c.CoreV1().Pods(pod.ObjectMeta.GetNamespace()).GetLogs(
-			name, &cv1.PodLogOptions{Previous: previous, Follow: true, Container: container})
+			name, &cv1.PodLogOptions{Previous: previous, Follow: true, Container: container, Timestamps: true})
 		rc, err := req.Stream()
 		if err != nil {
 			cancel()
@@ -122,6 +124,9 @@ func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan logData,
 		case <-ctx.Done():
 			return
 		case <-trig:
+			sort.Slice(logData, func(i, j int) bool {
+				return logData[i].time.Before(logData[j].time)
+			})
 			for _, d := range logData {
 				if showPrefixes {
 					buf.Write([]byte("["))
@@ -148,7 +153,7 @@ func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan logData,
 			// Buffer the writes in a timed window to avoid having to print out
 			// line by line when there is a lot of initial content
 			if canTrigger {
-				time.AfterFunc(250*time.Millisecond, func() { trig <- struct{}{} })
+				time.AfterFunc(500*time.Millisecond, func() { trig <- struct{}{} })
 				canTrigger = false
 			}
 		}
@@ -163,7 +168,7 @@ func readLogData(ctx context.Context, rc io.ReadCloser, data chan<- logData, pre
 		if ctx.Err() != nil {
 			return
 		}
-		bytes, err := r.ReadBytes('\n')
+		b, err := r.ReadBytes('\n')
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("Error reading stream: %v", err)
@@ -172,6 +177,12 @@ func readLogData(ctx context.Context, rc io.ReadCloser, data chan<- logData, pre
 			return
 		}
 
-		data <- logData{from: prefix, color: color, line: bytes}
+		parts := bytes.SplitN(b, []byte(" "), 2)
+		t, err := time.Parse(time.RFC3339Nano, string(parts[0]))
+		if err != nil {
+			log.Printf("Error parsing time %s from log line: %v", string(parts[0]), err)
+		}
+
+		data <- logData{from: prefix, color: color, line: parts[1], time: t}
 	}
 }
