@@ -1,15 +1,19 @@
 package k8s_test
 
 import (
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 
-	gomock "github.com/golang/mock/gomock"
 	"github.com/urandom/kd/k8s"
-	"github.com/urandom/kd/k8s/mock"
+	av1 "k8s.io/api/apps/v1"
 	cv1 "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	rest "k8s.io/client-go/rest"
 )
 
 func TestClient_Namespaces(t *testing.T) {
@@ -27,18 +31,25 @@ func TestClient_Namespaces(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.err != nil {
+					http.Error(w, tt.err.Error(), http.StatusInternalServerError)
+					return
+				}
 
-			clientset := mock.NewMockClientSet(ctrl)
-			corev1 := mock.NewMockCoreV1Interface(ctrl)
-			ns := mock.NewMockNamespaceInterface(ctrl)
+				w.Header().Add("Content-Type", "application/json")
+				if b, err := json.Marshal(tt.nsList); err == nil {
+					w.Write(b)
+				} else {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			}))
+			defer ts.Close()
 
-			clientset.EXPECT().CoreV1().Return(corev1)
-			corev1.EXPECT().Namespaces().Return(ns)
-			ns.EXPECT().List(gomock.Any()).Return(tt.nsList, tt.err)
-
-			c := k8s.NewFromClientSet(clientset)
+			c, err := k8s.NewForConfig(&rest.Config{Host: ts.URL})
+			if err != nil {
+				t.Fatal(err)
+			}
 			got, err := c.Namespaces()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Client.Namespaces() error = %v, wantErr %v", err, tt.wantErr)
@@ -66,24 +77,27 @@ func TestClient_Events(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.err != nil {
+					http.Error(w, tt.err.Error(), http.StatusInternalServerError)
+					return
+				}
 
-			obj := mock.NewMockObjectMetaGetter(ctrl)
-			clientset := mock.NewMockClientSet(ctrl)
-			corev1 := mock.NewMockCoreV1Interface(ctrl)
-			event := mock.NewMockEventInterface(ctrl)
-			selector := mock.NewMockSelector(ctrl)
+				w.Header().Add("Content-Type", "application/json")
+				if b, err := json.Marshal(tt.eventList); err == nil {
+					w.Write(b)
+				} else {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+			}))
+			defer ts.Close()
 
-			obj.EXPECT().GetObjectMeta().AnyTimes().Return(&metav1.ObjectMeta{})
-			clientset.EXPECT().CoreV1().Return(corev1)
-			corev1.EXPECT().Events(gomock.Any()).Return(event)
-			event.EXPECT().GetFieldSelector(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(selector)
-			selector.EXPECT().String()
-			event.EXPECT().List(gomock.Any()).Return(tt.eventList, tt.err)
+			c, err := k8s.NewForConfig(&rest.Config{Host: ts.URL})
+			if err != nil {
+				t.Fatal(err)
+			}
 
-			c := k8s.NewFromClientSet(clientset)
-			got, err := c.Events(obj)
+			got, err := c.Events(&av1.Deployment{ObjectMeta: meta.ObjectMeta{Name: "test1", Namespace: "default"}})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Client.Events() error = %v, wantErr %v", err, tt.wantErr)
 				return

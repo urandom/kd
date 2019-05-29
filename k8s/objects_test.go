@@ -31,7 +31,7 @@ func TestClient_PodTreeWatcher(t *testing.T) {
 			defer ctrl.Finish()
 
 			clientset := mock.NewMockClientSet(ctrl)
-			c := k8s.NewFromClientSet(clientset)
+			c := k8s.NewForClientSet(clientset)
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -217,7 +217,7 @@ func TestClient_PodTree(t *testing.T) {
 
 			pods.EXPECT().List(gomock.Any()).AnyTimes().Return(&tt.podList, tt.podErr)
 
-			c := k8s.NewFromClientSet(clientset)
+			c := k8s.NewForClientSet(clientset)
 			got, err := c.PodTree(tt.nsName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Client.PodTree() error = %v, wantErr %v", err, tt.wantErr)

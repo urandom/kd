@@ -17,6 +17,7 @@ import (
 	batchBeta "k8s.io/client-go/kubernetes/typed/batch/v1beta1"
 	core "k8s.io/client-go/kubernetes/typed/core/v1"
 	ev1 "k8s.io/client-go/kubernetes/typed/extensions/v1beta1"
+	rest "k8s.io/client-go/rest"
 
 	"golang.org/x/xerrors"
 
@@ -55,15 +56,19 @@ func New(configPath string) (*Client, error) {
 		return nil, xerrors.Errorf("building config with path %s: %w", configPath, err)
 	}
 
+	return NewForConfig(config)
+}
+
+func NewForConfig(config *rest.Config) (*Client, error) {
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, xerrors.Errorf("creating k8s clientset: %w", err)
 	}
 
-	return NewFromClientSet(clientset), nil
+	return NewForClientSet(clientset), nil
 }
 
-func NewFromClientSet(clientset ClientSet) *Client {
+func NewForClientSet(clientset ClientSet) *Client {
 	client := &Client{controllerOperators: ControllerOperators{}}
 	client.ClientSet = clientset
 
