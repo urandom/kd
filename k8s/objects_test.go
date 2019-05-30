@@ -34,7 +34,7 @@ func TestClient_PodTreeWatcher(t *testing.T) {
 				if b, err := json.Marshal(nil); err == nil {
 					w.Write(b)
 				} else {
-					w.WriteHeader(http.StatusInternalServerError)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
 				}
 			}))
 			defer ts.Close()

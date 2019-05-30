@@ -38,6 +38,7 @@ type Client struct {
 
 	mu                  sync.RWMutex
 	controllerOperators ControllerOperators
+	config              *rest.Config
 }
 
 // New returns a new k8s Client, using the kubeconfig specified by the path, or
@@ -65,16 +66,12 @@ func NewForConfig(config *rest.Config) (*Client, error) {
 		return nil, xerrors.Errorf("creating k8s clientset: %w", err)
 	}
 
-	return NewForClientSet(clientset), nil
-}
-
-func NewForClientSet(clientset ClientSet) *Client {
-	client := &Client{controllerOperators: ControllerOperators{}}
+	client := &Client{controllerOperators: ControllerOperators{}, config: config}
 	client.ClientSet = clientset
 
 	client.registerDefaults()
 
-	return client
+	return client, nil
 }
 
 func (c *Client) Namespaces() ([]string, error) {
