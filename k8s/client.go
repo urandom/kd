@@ -12,11 +12,6 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	apps "k8s.io/client-go/kubernetes/typed/apps/v1"
-	batch "k8s.io/client-go/kubernetes/typed/batch/v1"
-	batchBeta "k8s.io/client-go/kubernetes/typed/batch/v1beta1"
-	core "k8s.io/client-go/kubernetes/typed/core/v1"
-	ev1 "k8s.io/client-go/kubernetes/typed/extensions/v1beta1"
 	rest "k8s.io/client-go/rest"
 
 	"golang.org/x/xerrors"
@@ -24,17 +19,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-type ClientSet interface {
-	AppsV1() apps.AppsV1Interface
-	CoreV1() core.CoreV1Interface
-	BatchV1() batch.BatchV1Interface
-	BatchV1beta1() batchBeta.BatchV1beta1Interface
-	ExtensionsV1beta1() ev1.ExtensionsV1beta1Interface
-}
-
 // Client provides functions around the k8s clientset api.
 type Client struct {
-	ClientSet
+	*kubernetes.Clientset
 
 	mu                  sync.RWMutex
 	controllerOperators ControllerOperators
@@ -67,7 +54,7 @@ func NewForConfig(config *rest.Config) (*Client, error) {
 	}
 
 	client := &Client{controllerOperators: ControllerOperators{}, config: config}
-	client.ClientSet = clientset
+	client.Clientset = clientset
 
 	client.registerDefaults()
 
@@ -117,7 +104,7 @@ func (c *Client) registerDefaults() {
 
 			return nil
 		},
-		List: func(c ClientSet, ns string, opts meta.ListOptions) (
+		List: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
 			l, err := c.AppsV1().StatefulSets(ns).List(opts)
@@ -135,14 +122,14 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
-		Watch: func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		Watch: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.AppsV1().StatefulSets(ns).Watch(opts)
 			if err != nil {
 				err = xerrors.Errorf("getting watcher for %s: %w", StatefulSetType, err)
 			}
 			return w, err
 		},
-		Update: func(c ClientSet, o ObjectMetaGetter) (err error) {
+		Update: func(c *kubernetes.Clientset, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*av1.StatefulSet); ok {
 				_, err = c.AppsV1().StatefulSets(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
@@ -161,7 +148,7 @@ func (c *Client) registerDefaults() {
 
 			return nil
 		},
-		List: func(c ClientSet, ns string, opts meta.ListOptions) (
+		List: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
 			l, err := c.AppsV1().Deployments(ns).List(opts)
@@ -179,14 +166,14 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
-		Watch: func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		Watch: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.AppsV1().Deployments(ns).Watch(opts)
 			if err != nil {
 				err = xerrors.Errorf("getting watcher for %s: %w", DeploymentType, err)
 			}
 			return w, err
 		},
-		Update: func(c ClientSet, o ObjectMetaGetter) (err error) {
+		Update: func(c *kubernetes.Clientset, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*av1.Deployment); ok {
 				_, err = c.AppsV1().Deployments(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
@@ -205,7 +192,7 @@ func (c *Client) registerDefaults() {
 
 			return nil
 		},
-		List: func(c ClientSet, ns string, opts meta.ListOptions) (
+		List: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
 			l, err := c.AppsV1().DaemonSets(ns).List(opts)
@@ -223,14 +210,14 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
-		Watch: func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		Watch: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.AppsV1().DaemonSets(ns).Watch(opts)
 			if err != nil {
 				err = xerrors.Errorf("getting watcher for %s: %w", DaemonSetType, err)
 			}
 			return w, err
 		},
-		Update: func(c ClientSet, o ObjectMetaGetter) (err error) {
+		Update: func(c *kubernetes.Clientset, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*av1.DaemonSet); ok {
 				_, err = c.AppsV1().DaemonSets(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
@@ -249,7 +236,7 @@ func (c *Client) registerDefaults() {
 
 			return nil
 		},
-		List: func(c ClientSet, ns string, opts meta.ListOptions) (
+		List: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
 			l, err := c.BatchV1().Jobs(ns).List(opts)
@@ -267,14 +254,14 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
-		Watch: func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		Watch: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.BatchV1().Jobs(ns).Watch(opts)
 			if err != nil {
 				err = xerrors.Errorf("getting watcher for %s: %w", JobType, err)
 			}
 			return w, err
 		},
-		Update: func(c ClientSet, o ObjectMetaGetter) (err error) {
+		Update: func(c *kubernetes.Clientset, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*bv1.Job); ok {
 				_, err = c.BatchV1().Jobs(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
@@ -293,7 +280,7 @@ func (c *Client) registerDefaults() {
 
 			return nil
 		},
-		List: func(c ClientSet, ns string, opts meta.ListOptions) (
+		List: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
 			l, err := c.BatchV1beta1().CronJobs(ns).List(opts)
@@ -311,14 +298,14 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
-		Watch: func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		Watch: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.BatchV1beta1().CronJobs(ns).Watch(opts)
 			if err != nil {
 				err = xerrors.Errorf("getting watcher for %s: %w", CronJobType, err)
 			}
 			return w, err
 		},
-		Update: func(c ClientSet, o ObjectMetaGetter) (err error) {
+		Update: func(c *kubernetes.Clientset, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*bv1b1.CronJob); ok {
 				_, err = c.BatchV1beta1().CronJobs(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
@@ -337,7 +324,7 @@ func (c *Client) registerDefaults() {
 
 			return nil
 		},
-		List: func(c ClientSet, ns string, opts meta.ListOptions) (
+		List: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
 			l, err := c.CoreV1().Services(ns).List(opts)
@@ -355,14 +342,14 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
-		Watch: func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		Watch: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.CoreV1().Services(ns).Watch(opts)
 			if err != nil {
 				err = xerrors.Errorf("getting watcher for %s: %w", ServiceType, err)
 			}
 			return w, err
 		},
-		Update: func(c ClientSet, o ObjectMetaGetter) (err error) {
+		Update: func(c *kubernetes.Clientset, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*cv1.Service); ok {
 				_, err = c.CoreV1().Services(o.GetObjectMeta().GetNamespace()).Update(o)
 			}

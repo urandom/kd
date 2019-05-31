@@ -15,6 +15,7 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
 
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/xerrors"
@@ -76,12 +77,12 @@ type ControllerOperator struct {
 
 type ControllerFactory func(o ObjectMetaGetter, tree PodTree) Controller
 type ControllerGenerator func(tree PodTree) Controllers
-type ControllerList func(c ClientSet, ns string, opts meta.ListOptions) (
+type ControllerList func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (
 	ControllerGenerator, error,
 )
-type ControllerWatch func(c ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error)
-type ControllerUpdate func(c ClientSet, obj ObjectMetaGetter) error
-type ControllerDelete func(c ClientSet, obj ObjectMetaGetter, opts meta.DeleteOptions) error
+type ControllerWatch func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error)
+type ControllerUpdate func(c *kubernetes.Clientset, obj ObjectMetaGetter) error
+type ControllerDelete func(c *kubernetes.Clientset, obj ObjectMetaGetter, opts meta.DeleteOptions) error
 
 type Category string
 
@@ -288,7 +289,7 @@ func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodW
 			continue
 		}
 
-		if w, err = op.Watch(c, nsName, meta.ListOptions{}); err != nil {
+		if w, err = op.Watch(c.Clientset, nsName, meta.ListOptions{}); err != nil {
 			return nil, err
 		}
 
@@ -366,7 +367,7 @@ func (c *Client) PodTree(nsName string) (PodTree, error) {
 				return nil
 			}
 
-			gen, err := c.controllerOperators[t].List(c, nsName, meta.ListOptions{})
+			gen, err := c.controllerOperators[t].List(c.Clientset, nsName, meta.ListOptions{})
 			if err != nil {
 				return err
 			}
@@ -436,7 +437,7 @@ func (c *Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 			return xerrors.Errorf("unmarshaling data into %s: %w", typeName, err)
 		}
 
-		return op.Update(c, update.(ObjectMetaGetter))
+		return op.Update(c.Clientset, update.(ObjectMetaGetter))
 	}
 
 	return nil
@@ -477,12 +478,12 @@ func (c *Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) er
 		}
 
 		prop := meta.DeletePropagationForeground
-		if err := op.Delete(c, object, meta.DeleteOptions{PropagationPolicy: &prop}); err != nil {
+		if err := op.Delete(c.Clientset, object, meta.DeleteOptions{PropagationPolicy: &prop}); err != nil {
 			return err
 		}
 
 		if op.Watch != nil {
-			w, err := op.Watch(c, object.GetObjectMeta().GetNamespace(), meta.ListOptions{
+			w, err := op.Watch(c.Clientset, object.GetObjectMeta().GetNamespace(), meta.ListOptions{
 				FieldSelector: "metadata.name=" + v.GetObjectMeta().GetName(),
 			})
 			if err != nil {

@@ -11,6 +11,7 @@ import (
 	"golang.org/x/xerrors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/yaml"
 )
 
@@ -124,7 +125,7 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op Co
 
 	if op.List != nil {
 		list := op.List
-		k8sOp.List = func(c k8s.ClientSet, ns string, opts meta.ListOptions) (k8s.ControllerGenerator, error) {
+		k8sOp.List = func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (k8s.ControllerGenerator, error) {
 
 			type payload struct {
 				gen k8s.ControllerGenerator
@@ -156,7 +157,7 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op Co
 
 	if op.Watch != nil {
 		w := op.Watch
-		k8sOp.Watch = func(c k8s.ClientSet, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		k8sOp.Watch = func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			type payload struct {
 				watch watch.Interface
 				err   error
@@ -189,7 +190,7 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op Co
 
 	if op.Update != nil {
 		update := op.Update
-		k8sOp.Update = func(c k8s.ClientSet, o k8s.ObjectMetaGetter) error {
+		k8sOp.Update = func(c *kubernetes.Clientset, o k8s.ObjectMetaGetter) error {
 			errC := make(chan error)
 
 			rt.ops <- func() {
@@ -202,7 +203,7 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op Co
 
 	if op.Delete != nil {
 		delete := op.Delete
-		k8sOp.Delete = func(c k8s.ClientSet, o k8s.ObjectMetaGetter, opts meta.DeleteOptions) error {
+		k8sOp.Delete = func(c *kubernetes.Clientset, o k8s.ObjectMetaGetter, opts meta.DeleteOptions) error {
 			errC := make(chan error)
 
 			rt.ops <- func() {
