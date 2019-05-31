@@ -55,7 +55,7 @@ func (p *Details) show(object k8s.ObjectMetaGetter) tview.Primitive {
 			fmt.Fprint(p.ui.PodData, "[greenyellow::b]Summary\n=======\n\n")
 			p.printObjectSummary(p.ui.PodData, object)
 			fmt.Fprint(p.ui.PodData, "[greenyellow::b]Object\n======\n\n")
-			fmt.Fprint(p.ui.PodData, string(data))
+			fmt.Fprint(p.ui.PodData, tview.Escape(string(data)))
 		} else {
 			p.ui.PodData.SetText(err.Error())
 		}
