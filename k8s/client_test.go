@@ -41,7 +41,7 @@ func TestClient_Namespaces(t *testing.T) {
 				if b, err := json.Marshal(tt.nsList); err == nil {
 					w.Write(b)
 				} else {
-					w.WriteHeader(http.StatusInternalServerError)
+					http.Error(w, tt.err.Error(), http.StatusInternalServerError)
 				}
 			}))
 			defer ts.Close()
@@ -87,7 +87,7 @@ func TestClient_Events(t *testing.T) {
 				if b, err := json.Marshal(tt.eventList); err == nil {
 					w.Write(b)
 				} else {
-					w.WriteHeader(http.StatusInternalServerError)
+					http.Error(w, tt.err.Error(), http.StatusInternalServerError)
 				}
 			}))
 			defer ts.Close()
