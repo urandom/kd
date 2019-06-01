@@ -76,6 +76,10 @@ func (o *GenericObj) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type GenericObjList struct {
+	Items []GenericObj `json:"items"`
+}
+
 func (c *Client) ResultToObject(result rest.Result) (ObjectMetaGetter, error) {
 	b, err := result.Raw()
 	if err != nil {
@@ -89,4 +93,19 @@ func (c *Client) ResultToObject(result rest.Result) (ObjectMetaGetter, error) {
 	}
 
 	return &o, nil
+}
+
+func (c *Client) ResultToObjectList(result rest.Result) ([]GenericObj, error) {
+	b, err := result.Raw()
+	if err != nil {
+		return nil, xerrors.Errorf("obtaining result data: %w", err)
+	}
+
+	var o GenericObjList
+
+	if err := json.Unmarshal(b, &o); err != nil {
+		return nil, xerrors.Errorf("parsing result data: %w", err)
+	}
+
+	return o.Items, nil
 }

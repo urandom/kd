@@ -78,7 +78,58 @@ func TestClient_RestClient(t *testing.T) {
 	}
 }
 
-var customObjData = `
+func TestClient_RestClient_List(t *testing.T) {
+	tests := []struct {
+		name    string
+		uri     string
+		err     error
+		timeout time.Duration
+		data    []byte
+		want    []k8s.GenericObj
+		wantErr bool
+	}{
+		{name: "not json", data: []byte("{non-json>data"), wantErr: true},
+		{name: "custom object", uri: "/apis/custom.surg.org/v1/custom", data: []byte(customObjDataList), want: []k8s.GenericObj{
+			{ObjectMeta: meta.ObjectMeta{Name: "obj1"}, Spec: map[string]interface{}{"data": "foo"}},
+			{ObjectMeta: meta.ObjectMeta{Name: "obj2"}, Spec: map[string]interface{}{"data": "bar"}},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.err != nil {
+					http.Error(w, tt.err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				w.Header().Add("Content-Type", "application/json")
+				w.Write(tt.data)
+			}))
+			defer ts.Close()
+
+			c, err := k8s.NewForConfig(&rest.Config{Host: ts.URL})
+			if err != nil {
+				t.Fatal(err)
+			}
+			rc, err := c.RestClient(tt.uri)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := c.ResultToObjectList(rc.Get().Timeout(tt.timeout).Do())
+			t.Log(err)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Client.RestClient() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if diff := deep.Equal(got, tt.want); diff != nil {
+				t.Errorf("Client.RestClient() diff = %v", diff)
+			}
+		})
+	}
+}
+
+var (
+	customObjData = `
 {
     "apiVersion": "custom.sugr.org/v1",
     "kind": "CustomObject",
@@ -97,3 +148,19 @@ var customObjData = `
     "custom": 42
 }
 `
+	customObjDataList = `
+{
+    "apiVersion": "custom.sugr.org/v1",
+	"items": [
+		{
+			"metadata": {"name": "obj1"},
+			"spec": {"data": "foo"}
+		},
+		{
+			"metadata": {"name": "obj2"},
+			"spec": {"data": "bar"}
+		}
+	]
+}
+`
+)
