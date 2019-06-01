@@ -104,7 +104,7 @@ func (c *Client) registerDefaults() {
 
 			return nil
 		},
-		List: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (
+		List: func(c *Client, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
 			l, err := c.AppsV1().StatefulSets(ns).List(opts)
@@ -122,14 +122,14 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
-		Watch: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.AppsV1().StatefulSets(ns).Watch(opts)
 			if err != nil {
 				err = xerrors.Errorf("getting watcher for %s: %w", StatefulSetType, err)
 			}
 			return w, err
 		},
-		Update: func(c *kubernetes.Clientset, o ObjectMetaGetter) (err error) {
+		Update: func(c *Client, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*av1.StatefulSet); ok {
 				_, err = c.AppsV1().StatefulSets(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
@@ -148,7 +148,7 @@ func (c *Client) registerDefaults() {
 
 			return nil
 		},
-		List: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (
+		List: func(c *Client, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
 			l, err := c.AppsV1().Deployments(ns).List(opts)
@@ -166,14 +166,14 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
-		Watch: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.AppsV1().Deployments(ns).Watch(opts)
 			if err != nil {
 				err = xerrors.Errorf("getting watcher for %s: %w", DeploymentType, err)
 			}
 			return w, err
 		},
-		Update: func(c *kubernetes.Clientset, o ObjectMetaGetter) (err error) {
+		Update: func(c *Client, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*av1.Deployment); ok {
 				_, err = c.AppsV1().Deployments(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
@@ -192,7 +192,7 @@ func (c *Client) registerDefaults() {
 
 			return nil
 		},
-		List: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (
+		List: func(c *Client, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
 			l, err := c.AppsV1().DaemonSets(ns).List(opts)
@@ -210,14 +210,14 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
-		Watch: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.AppsV1().DaemonSets(ns).Watch(opts)
 			if err != nil {
 				err = xerrors.Errorf("getting watcher for %s: %w", DaemonSetType, err)
 			}
 			return w, err
 		},
-		Update: func(c *kubernetes.Clientset, o ObjectMetaGetter) (err error) {
+		Update: func(c *Client, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*av1.DaemonSet); ok {
 				_, err = c.AppsV1().DaemonSets(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
@@ -236,7 +236,7 @@ func (c *Client) registerDefaults() {
 
 			return nil
 		},
-		List: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (
+		List: func(c *Client, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
 			l, err := c.BatchV1().Jobs(ns).List(opts)
@@ -254,14 +254,14 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
-		Watch: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.BatchV1().Jobs(ns).Watch(opts)
 			if err != nil {
 				err = xerrors.Errorf("getting watcher for %s: %w", JobType, err)
 			}
 			return w, err
 		},
-		Update: func(c *kubernetes.Clientset, o ObjectMetaGetter) (err error) {
+		Update: func(c *Client, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*bv1.Job); ok {
 				_, err = c.BatchV1().Jobs(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
@@ -280,7 +280,7 @@ func (c *Client) registerDefaults() {
 
 			return nil
 		},
-		List: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (
+		List: func(c *Client, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
 			l, err := c.BatchV1beta1().CronJobs(ns).List(opts)
@@ -298,14 +298,14 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
-		Watch: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.BatchV1beta1().CronJobs(ns).Watch(opts)
 			if err != nil {
 				err = xerrors.Errorf("getting watcher for %s: %w", CronJobType, err)
 			}
 			return w, err
 		},
-		Update: func(c *kubernetes.Clientset, o ObjectMetaGetter) (err error) {
+		Update: func(c *Client, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*bv1b1.CronJob); ok {
 				_, err = c.BatchV1beta1().CronJobs(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
@@ -324,7 +324,7 @@ func (c *Client) registerDefaults() {
 
 			return nil
 		},
-		List: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (
+		List: func(c *Client, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
 			l, err := c.CoreV1().Services(ns).List(opts)
@@ -342,14 +342,14 @@ func (c *Client) registerDefaults() {
 				return controllers
 			}, nil
 		},
-		Watch: func(c *kubernetes.Clientset, ns string, opts meta.ListOptions) (watch.Interface, error) {
+		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.CoreV1().Services(ns).Watch(opts)
 			if err != nil {
 				err = xerrors.Errorf("getting watcher for %s: %w", ServiceType, err)
 			}
 			return w, err
 		},
-		Update: func(c *kubernetes.Clientset, o ObjectMetaGetter) (err error) {
+		Update: func(c *Client, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*cv1.Service); ok {
 				_, err = c.CoreV1().Services(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
