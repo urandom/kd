@@ -3,7 +3,6 @@ package k8s_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -23,6 +22,7 @@ func TestClient_Logs(t *testing.T) {
 		object    k8s.ObjectMetaGetter
 		container string
 		colors    []string
+		data      [][]byte
 		want      [][]byte
 		wantErr   bool
 	}{
@@ -53,15 +53,36 @@ func TestClient_Logs(t *testing.T) {
 				ContainerStatuses: []cv1.ContainerStatus{{Name: "con1"}, {Name: "con2", LastTerminationState: cv1.ContainerState{Terminated: &cv1.ContainerStateTerminated{}}}},
 			},
 		}, container: "previous:con2", colors: []string{"red", "blue"}, timeout: 100 * time.Millisecond},
+		{name: "pod", object: &cv1.Pod{
+			ObjectMeta: meta.ObjectMeta{Name: "pod1"}, Status: cv1.PodStatus{
+				ContainerStatuses: []cv1.ContainerStatus{{Name: "con1"}},
+			},
+		}, colors: []string{"red", "blue"}, data: [][]byte{
+			[]byte("2006-01-02T15:04:07Z Line 1\n"),
+			[]byte("2006-01-02T15:04:05Z Line 2\n"),
+		}, want: [][]byte{
+			[]byte("Line 2\nLine 1\n"),
+		}, timeout: 700 * time.Millisecond},
+		{name: "pods in object", object: k8s.NewCtrlWithPods(&av1.Deployment{}, k8s.CategoryDeployment, nil, []*cv1.Pod{
+			{ObjectMeta: meta.ObjectMeta{Name: "pod1"}, Status: cv1.PodStatus{
+				ContainerStatuses: []cv1.ContainerStatus{{Name: "con1"}},
+			}},
+			{ObjectMeta: meta.ObjectMeta{Name: "pod2"}, Status: cv1.PodStatus{
+				ContainerStatuses: []cv1.ContainerStatus{{Name: "con1"}},
+			}},
+		}), colors: []string{"red", "blue"}, data: [][]byte{
+			[]byte("2006-01-02T15:04:07Z Line 1\n"),
+			[]byte("2006-01-02T15:04:05Z Line 2\n"),
+		}, want: [][]byte{
+			[]byte("[red]pod1 → [white]Line 2\n[blue]pod2 → [white]Line 2\n[red]pod1 → [white]Line 1\n[blue]pod2 → [white]Line 1\n"),
+		}, timeout: 700 * time.Millisecond},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Add("Content-Type", "application/json")
-				if b, err := json.Marshal(nil); err == nil {
+				w.Header().Add("Content-Type", "text/plain")
+				for _, b := range tt.data {
 					w.Write(b)
-				} else {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
 				}
 			}))
 			defer ts.Close()
@@ -81,8 +102,9 @@ func TestClient_Logs(t *testing.T) {
 			for data := range got {
 				var found bool
 				for i := range tt.want {
-					if bytes.Equal(data, tt.want[i]) {
+					if bytes.Equal(tt.want[i], data) {
 						found = true
+						break
 					}
 				}
 
