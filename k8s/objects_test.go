@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/urandom/kd/k8s"
 	av1 "k8s.io/api/apps/v1"
@@ -18,21 +19,140 @@ import (
 	rest "k8s.io/client-go/rest"
 )
 
+type event struct {
+	Object k8s.ObjectMetaGetter `json:"object"`
+	Type   string               `json:"type"`
+}
+
 func TestClient_PodTreeWatcher(t *testing.T) {
+	podWatchEv := event{Object: &pods[0], Type: "ADDED"}
+	statefulSetWatchEv := event{Object: &statefulset, Type: "ADDED"}
+	deploymentWatchEv := event{Object: &deployment, Type: "ADDED"}
+	daemonSetWatchEv := event{Object: &daemonset, Type: "ADDED"}
+	jobWatchEv := event{Object: &job, Type: "ADDED"}
+	cronJobWatchEv := event{Object: &cronjob, Type: "ADDED"}
+	serviceWatchEv := event{Object: &service, Type: "ADDED"}
+
 	tests := []struct {
-		name    string
-		nsName  string
-		want    []k8s.PodWatcherEvent
-		wantErr bool
+		name                string
+		nsName              string
+		podWatchEv          *event
+		podWatchErr         error
+		podList             cv1.PodList
+		podErr              error
+		statefulSetWatchEv  *event
+		statefulSetWatchErr error
+		statefulSetList     av1.StatefulSetList
+		statefulSetErr      error
+		deploymentWatchEv   *event
+		deploymentWatchErr  error
+		deploymentList      av1.DeploymentList
+		deploymentErr       error
+		daemonSetWatchEv    *event
+		daemonSetWatchErr   error
+		daemonSetList       av1.DaemonSetList
+		daemonSetErr        error
+		jobWatchEv          *event
+		jobWatchErr         error
+		jobList             bv1.JobList
+		jobErr              error
+		cronJobWatchEv      *event
+		cronJobWatchErr     error
+		cronJobList         bv1b1.CronJobList
+		cronJobErr          error
+		serviceWatchEv      *event
+		serviceWatchErr     error
+		serviceList         cv1.ServiceList
+		serviceErr          error
+		want                []k8s.PodWatcherEvent
+		wantErr             bool
 	}{
-		// TODO: Add test cases.
+		{name: " pod watch err", podWatchErr: errors.New("err"), wantErr: true},
+		{name: "statefulset watch err", statefulSetWatchErr: errors.New("err"), wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var data interface{}
+				var err error
+				switch r.URL.String() {
+				case "/api/v1/pods?watch=true":
+					time.Sleep(100 * time.Millisecond)
+					if tt.podWatchEv == nil {
+						data = podWatchEv
+					} else {
+						data = tt.podWatchEv
+					}
+					err = tt.podWatchErr
+				case "/apis/apps/v1/statefulsets?watch=true":
+					time.Sleep(100 * time.Millisecond)
+					if tt.statefulSetWatchEv == nil {
+						data = statefulSetWatchEv
+					} else {
+						data = tt.statefulSetWatchEv
+					}
+					err = tt.statefulSetWatchErr
+				case "/apis/apps/v1/deployments?watch=true":
+					time.Sleep(100 * time.Millisecond)
+					if tt.deploymentWatchEv == nil {
+						data = deploymentWatchEv
+					} else {
+						data = tt.deploymentWatchEv
+					}
+					err = tt.deploymentWatchErr
+				case "/apis/apps/v1/daemonsets?watch=true":
+					time.Sleep(100 * time.Millisecond)
+					if tt.daemonSetWatchEv == nil {
+						data = daemonSetWatchEv
+					} else {
+						data = tt.daemonSetWatchEv
+					}
+					err = tt.daemonSetWatchErr
+				case "/apis/batch/v1/jobs?watch=true":
+					time.Sleep(100 * time.Millisecond)
+					if tt.cronJobWatchEv == nil {
+						data = jobWatchEv
+					} else {
+						data = tt.jobWatchEv
+					}
+					err = tt.jobWatchErr
+				case "/apis/batch/v1beta1/cronjobs?watch=true":
+					time.Sleep(100 * time.Millisecond)
+					if tt.cronJobWatchEv == nil {
+						data = cronJobWatchEv
+					} else {
+						data = tt.cronJobWatchEv
+					}
+					err = tt.cronJobWatchErr
+				case "/api/v1/services?watch=true":
+					time.Sleep(100 * time.Millisecond)
+					if tt.serviceWatchEv == nil {
+						data = serviceWatchEv
+					} else {
+						data = tt.serviceWatchEv
+					}
+					err = tt.serviceWatchErr
+				default:
+					treeHandler(t,
+						tt.podList, tt.podErr,
+						tt.statefulSetList, tt.statefulSetErr,
+						tt.deploymentList, tt.deploymentErr,
+						tt.daemonSetList, tt.daemonSetErr,
+						tt.jobList, tt.jobErr,
+						tt.cronJobList, tt.cronJobErr,
+						tt.serviceList, tt.serviceErr,
+					)
+					return
+				}
+				var b []byte
+				if err == nil {
+					b, err = json.Marshal(data)
+				}
 				w.Header().Add("Content-Type", "application/json")
-				if b, err := json.Marshal(nil); err == nil {
-					w.Write(b)
+				if err == nil {
+					if data != nil {
+						w.Write(b)
+					}
 				} else {
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 				}
@@ -64,32 +184,6 @@ func TestClient_PodTreeWatcher(t *testing.T) {
 }
 
 func TestClient_PodTree(t *testing.T) {
-	pods := []cv1.Pod{
-		{ObjectMeta: meta.ObjectMeta{Name: "p1", Labels: map[string]string{"app": "p"}}},
-		{ObjectMeta: meta.ObjectMeta{Name: "p2", Labels: map[string]string{"app": "p"}}},
-		{ObjectMeta: meta.ObjectMeta{Name: "k1", Labels: map[string]string{"app": "k"}}},
-	}
-	statefulset := av1.StatefulSet{
-		ObjectMeta: meta.ObjectMeta{Name: "p"}, Spec: av1.StatefulSetSpec{
-			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "p"}},
-		}}
-	deployment := av1.Deployment{
-		ObjectMeta: meta.ObjectMeta{Name: "p"}, Spec: av1.DeploymentSpec{
-			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "p"}},
-		}}
-	daemonset := av1.DaemonSet{
-		ObjectMeta: meta.ObjectMeta{Name: "p"}, Spec: av1.DaemonSetSpec{
-			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "k"}},
-		}}
-	job := bv1.Job{
-		ObjectMeta: meta.ObjectMeta{Name: "p", OwnerReferences: []meta.OwnerReference{{UID: "cronjob"}}}, Spec: bv1.JobSpec{
-			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "p"}},
-		}}
-	cronjob := bv1b1.CronJob{ObjectMeta: meta.ObjectMeta{Name: "p", UID: "cronjob"}}
-	service := cv1.Service{
-		ObjectMeta: meta.ObjectMeta{Name: "p"}, Spec: cv1.ServiceSpec{
-			Selector: map[string]string{"app": "k"},
-		}}
 	tests := []struct {
 		name            string
 		nsName          string
@@ -186,47 +280,15 @@ func TestClient_PodTree(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Add("Content-Type", "application/json")
-				var data interface{}
-				var err error
-
-				switch r.URL.String() {
-				case "/api/v1/pods":
-					data = tt.podList
-					err = tt.podErr
-				case "/apis/apps/v1/statefulsets":
-					data = tt.statefulSetList
-					err = tt.statefulSetErr
-				case "/apis/apps/v1/deployments":
-					data = tt.deploymentList
-					err = tt.deploymentErr
-				case "/apis/apps/v1/daemonsets":
-					data = tt.daemonSetList
-					err = tt.daemonSetErr
-				case "/apis/batch/v1/jobs":
-					data = tt.jobList
-					err = tt.jobErr
-				case "/apis/batch/v1beta1/cronjobs":
-					data = tt.cronJobList
-					err = tt.cronJobErr
-				case "/api/v1/services":
-					data = tt.serviceList
-					err = tt.serviceErr
-				default:
-					t.Fatal(r.URL.String())
-				}
-
-				var b []byte
-				if err == nil {
-					b, err = json.Marshal(data)
-				}
-				if err == nil {
-					w.Write(b)
-				} else {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-				}
-			}))
+			ts := httptest.NewServer(treeHandler(t,
+				tt.podList, tt.podErr,
+				tt.statefulSetList, tt.statefulSetErr,
+				tt.deploymentList, tt.deploymentErr,
+				tt.daemonSetList, tt.daemonSetErr,
+				tt.jobList, tt.jobErr,
+				tt.cronJobList, tt.cronJobErr,
+				tt.serviceList, tt.serviceErr,
+			))
 			defer ts.Close()
 
 			c, err := k8s.NewForConfig(&rest.Config{Host: ts.URL})
@@ -245,3 +307,91 @@ func TestClient_PodTree(t *testing.T) {
 		})
 	}
 }
+
+func treeHandler(t *testing.T,
+	podList cv1.PodList,
+	podErr error,
+	statefulSetList av1.StatefulSetList,
+	statefulSetErr error,
+	deploymentList av1.DeploymentList,
+	deploymentErr error,
+	daemonSetList av1.DaemonSetList,
+	daemonSetErr error,
+	jobList bv1.JobList,
+	jobErr error,
+	cronJobList bv1b1.CronJobList,
+	cronJobErr error,
+	serviceList cv1.ServiceList,
+	serviceErr error,
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json")
+		var data interface{}
+		var err error
+
+		switch r.URL.String() {
+		case "/api/v1/pods":
+			data = podList
+			err = podErr
+		case "/apis/apps/v1/statefulsets":
+			data = statefulSetList
+			err = statefulSetErr
+		case "/apis/apps/v1/deployments":
+			data = deploymentList
+			err = deploymentErr
+		case "/apis/apps/v1/daemonsets":
+			data = daemonSetList
+			err = daemonSetErr
+		case "/apis/batch/v1/jobs":
+			data = jobList
+			err = jobErr
+		case "/apis/batch/v1beta1/cronjobs":
+			data = cronJobList
+			err = cronJobErr
+		case "/api/v1/services":
+			data = serviceList
+			err = serviceErr
+		default:
+			t.Fatal(r.URL.String())
+		}
+
+		var b []byte
+		if err == nil {
+			b, err = json.Marshal(data)
+		}
+		if err == nil {
+			w.Write(b)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
+
+var (
+	pods = []cv1.Pod{
+		{TypeMeta: meta.TypeMeta{Kind: "Pod", APIVersion: "v1"}, ObjectMeta: meta.ObjectMeta{Name: "p1", UID: "p1", Labels: map[string]string{"app": "p"}}},
+		{TypeMeta: meta.TypeMeta{Kind: "Pod", APIVersion: "v1"}, ObjectMeta: meta.ObjectMeta{Name: "p2", UID: "p2", Labels: map[string]string{"app": "p"}}},
+		{TypeMeta: meta.TypeMeta{Kind: "Pod", APIVersion: "v1"}, ObjectMeta: meta.ObjectMeta{Name: "k1", UID: "k1", Labels: map[string]string{"app": "k"}}},
+	}
+	statefulset = av1.StatefulSet{
+		ObjectMeta: meta.ObjectMeta{Name: "p", UID: "sts"}, Spec: av1.StatefulSetSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "p"}},
+		}}
+	deployment = av1.Deployment{
+		ObjectMeta: meta.ObjectMeta{Name: "p", UID: "deploy"}, Spec: av1.DeploymentSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "p"}},
+		}}
+	daemonset = av1.DaemonSet{
+		ObjectMeta: meta.ObjectMeta{Name: "p", UID: "ds"}, Spec: av1.DaemonSetSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "k"}},
+		}}
+	job = bv1.Job{
+		ObjectMeta: meta.ObjectMeta{Name: "p", OwnerReferences: []meta.OwnerReference{{UID: "cronjob"}}, UID: "job"}, Spec: bv1.JobSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "p"}},
+		}}
+	cronjob = bv1b1.CronJob{ObjectMeta: meta.ObjectMeta{Name: "p", UID: "cronjob"}}
+	service = cv1.Service{
+		ObjectMeta: meta.ObjectMeta{Name: "p", UID: "svc"}, Spec: cv1.ServiceSpec{
+			Selector: map[string]string{"app": "k"},
+		}}
+)
