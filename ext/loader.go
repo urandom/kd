@@ -1,13 +1,12 @@
 package ext
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
 	"path/filepath"
-
-	"golang.org/x/xerrors"
 )
 
 type Loader struct {
@@ -17,7 +16,7 @@ type Loader struct {
 func NewLoader(paths ...string) (Loader, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return Loader{}, xerrors.Errorf("getting user home dir: %w", err)
+		return Loader{}, fmt.Errorf("getting user home dir: %w", err)
 	}
 	defaultPaths := []string{
 		filepath.Join(home, ".local", "share", "kd", "extensions"),
@@ -45,7 +44,7 @@ func (l Loader) Extensions() (map[string]string, error) {
 		log.Println("Looking up extensions in path", pa)
 		paths, err := filepath.Glob(filepath.Join(pa, "*.js"))
 		if err != nil {
-			return nil, xerrors.Errorf("getting list of extensions: %w", err)
+			return nil, fmt.Errorf("getting list of extensions: %w", err)
 		}
 
 		for _, p := range paths {

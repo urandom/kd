@@ -28,7 +28,7 @@ require (
 	golang.org/x/sys v0.0.0-20190516110030-61b9204099cb // indirect
 	golang.org/x/text v0.3.2 // indirect
 	golang.org/x/time v0.0.0-20181108054448-85acf8d2951c // indirect
-	golang.org/x/xerrors v0.0.0-20190315151331-d61658bd2e18
+	golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.2.2 // indirect
 	k8s.io/api v0.0.0-20190222213804-5cb15d344471
@@ -39,3 +39,5 @@ require (
 )
 
 replace github.com/rivo/tview => github.com/urandom/tview v0.0.0-20190414155056-8d70a30e01e5
+
+go 1.13

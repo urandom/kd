@@ -13,7 +13,6 @@ import (
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
 	"github.com/urandom/kd/ui/presenter"
-	"golang.org/x/xerrors"
 	"k8s.io/klog"
 )
 
@@ -69,7 +68,7 @@ func configPath() string {
 func setupLogging() error {
 	f, err := os.OpenFile("/tmp/kd.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
-		return xerrors.Errorf("opening log file: %w", err)
+		return fmt.Errorf("opening log file: %w", err)
 	}
 
 	log.SetOutput(f)

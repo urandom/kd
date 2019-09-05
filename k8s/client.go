@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -13,8 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	rest "k8s.io/client-go/rest"
-
-	"golang.org/x/xerrors"
 
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -41,7 +40,7 @@ func New(configPath string) (*Client, error) {
 
 	config, err := clientcmd.BuildConfigFromFlags("", configPath)
 	if err != nil {
-		return nil, xerrors.Errorf("building config with path %s: %w", configPath, err)
+		return nil, fmt.Errorf("building config with path %s: %w", configPath, err)
 	}
 
 	return NewForConfig(config)
@@ -50,7 +49,7 @@ func New(configPath string) (*Client, error) {
 func NewForConfig(config *rest.Config) (*Client, error) {
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return nil, xerrors.Errorf("creating k8s clientset: %w", err)
+		return nil, fmt.Errorf("creating k8s clientset: %w", err)
 	}
 
 	client := &Client{controllerOperators: ControllerOperators{}, config: config}
@@ -64,7 +63,7 @@ func NewForConfig(config *rest.Config) (*Client, error) {
 func (c *Client) Namespaces() ([]string, error) {
 	ns, err := c.CoreV1().Namespaces().List(meta.ListOptions{})
 	if err != nil {
-		return nil, xerrors.Errorf("getting list of namespaces: %w", err)
+		return nil, fmt.Errorf("getting list of namespaces: %w", err)
 	}
 
 	namespaces := make([]string, len(ns.Items)+1)
@@ -84,7 +83,7 @@ func (c *Client) Events(obj ObjectMetaGetter) ([]cv1.Event, error) {
 	opts := meta.ListOptions{FieldSelector: selector.String()}
 	list, err := events.List(opts)
 	if err != nil {
-		return nil, xerrors.Errorf("getting list of events for object %s: %w", name, err)
+		return nil, fmt.Errorf("getting list of events for object %s: %w", name, err)
 	}
 	return list.Items, nil
 }
@@ -109,7 +108,7 @@ func (c *Client) registerDefaults() {
 		) {
 			l, err := c.AppsV1().StatefulSets(ns).List(opts)
 			if err != nil {
-				return nil, xerrors.Errorf("getting list for %s: %w", StatefulSetType, err)
+				return nil, fmt.Errorf("getting list for %s: %w", StatefulSetType, err)
 			}
 
 			return func(tree PodTree) Controllers {
@@ -125,7 +124,7 @@ func (c *Client) registerDefaults() {
 		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.AppsV1().StatefulSets(ns).Watch(opts)
 			if err != nil {
-				err = xerrors.Errorf("getting watcher for %s: %w", StatefulSetType, err)
+				err = fmt.Errorf("getting watcher for %s: %w", StatefulSetType, err)
 			}
 			return w, err
 		},
@@ -134,7 +133,7 @@ func (c *Client) registerDefaults() {
 				_, err = c.AppsV1().StatefulSets(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
 			if err != nil {
-				return xerrors.Errorf("updating %s %s: %w", StatefulSetType, o.GetObjectMeta().GetName(), err)
+				return fmt.Errorf("updating %s %s: %w", StatefulSetType, o.GetObjectMeta().GetName(), err)
 			}
 			return err
 		},
@@ -153,7 +152,7 @@ func (c *Client) registerDefaults() {
 		) {
 			l, err := c.AppsV1().Deployments(ns).List(opts)
 			if err != nil {
-				return nil, xerrors.Errorf("getting list for %s: %w", DeploymentType, err)
+				return nil, fmt.Errorf("getting list for %s: %w", DeploymentType, err)
 			}
 
 			return func(tree PodTree) Controllers {
@@ -169,7 +168,7 @@ func (c *Client) registerDefaults() {
 		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.AppsV1().Deployments(ns).Watch(opts)
 			if err != nil {
-				err = xerrors.Errorf("getting watcher for %s: %w", DeploymentType, err)
+				err = fmt.Errorf("getting watcher for %s: %w", DeploymentType, err)
 			}
 			return w, err
 		},
@@ -178,7 +177,7 @@ func (c *Client) registerDefaults() {
 				_, err = c.AppsV1().Deployments(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
 			if err != nil {
-				return xerrors.Errorf("updating %s %s: %w", DeploymentType, o.GetObjectMeta().GetName(), err)
+				return fmt.Errorf("updating %s %s: %w", DeploymentType, o.GetObjectMeta().GetName(), err)
 			}
 			return err
 		},
@@ -197,7 +196,7 @@ func (c *Client) registerDefaults() {
 		) {
 			l, err := c.AppsV1().DaemonSets(ns).List(opts)
 			if err != nil {
-				return nil, xerrors.Errorf("getting list for %s: %w", DaemonSetType, err)
+				return nil, fmt.Errorf("getting list for %s: %w", DaemonSetType, err)
 			}
 
 			return func(tree PodTree) Controllers {
@@ -213,7 +212,7 @@ func (c *Client) registerDefaults() {
 		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.AppsV1().DaemonSets(ns).Watch(opts)
 			if err != nil {
-				err = xerrors.Errorf("getting watcher for %s: %w", DaemonSetType, err)
+				err = fmt.Errorf("getting watcher for %s: %w", DaemonSetType, err)
 			}
 			return w, err
 		},
@@ -222,7 +221,7 @@ func (c *Client) registerDefaults() {
 				_, err = c.AppsV1().DaemonSets(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
 			if err != nil {
-				return xerrors.Errorf("updating %s %s: %w", DaemonSetType, o.GetObjectMeta().GetName(), err)
+				return fmt.Errorf("updating %s %s: %w", DaemonSetType, o.GetObjectMeta().GetName(), err)
 			}
 			return err
 		},
@@ -241,7 +240,7 @@ func (c *Client) registerDefaults() {
 		) {
 			l, err := c.BatchV1().Jobs(ns).List(opts)
 			if err != nil {
-				return nil, xerrors.Errorf("getting list for %s: %w", JobType, err)
+				return nil, fmt.Errorf("getting list for %s: %w", JobType, err)
 			}
 
 			return func(tree PodTree) Controllers {
@@ -257,7 +256,7 @@ func (c *Client) registerDefaults() {
 		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.BatchV1().Jobs(ns).Watch(opts)
 			if err != nil {
-				err = xerrors.Errorf("getting watcher for %s: %w", JobType, err)
+				err = fmt.Errorf("getting watcher for %s: %w", JobType, err)
 			}
 			return w, err
 		},
@@ -266,7 +265,7 @@ func (c *Client) registerDefaults() {
 				_, err = c.BatchV1().Jobs(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
 			if err != nil {
-				return xerrors.Errorf("updating %s %s: %w", JobType, o.GetObjectMeta().GetName(), err)
+				return fmt.Errorf("updating %s %s: %w", JobType, o.GetObjectMeta().GetName(), err)
 			}
 			return err
 		},
@@ -285,7 +284,7 @@ func (c *Client) registerDefaults() {
 		) {
 			l, err := c.BatchV1beta1().CronJobs(ns).List(opts)
 			if err != nil {
-				return nil, xerrors.Errorf("getting list for %s: %w", CronJobType, err)
+				return nil, fmt.Errorf("getting list for %s: %w", CronJobType, err)
 			}
 
 			return func(tree PodTree) Controllers {
@@ -301,7 +300,7 @@ func (c *Client) registerDefaults() {
 		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.BatchV1beta1().CronJobs(ns).Watch(opts)
 			if err != nil {
-				err = xerrors.Errorf("getting watcher for %s: %w", CronJobType, err)
+				err = fmt.Errorf("getting watcher for %s: %w", CronJobType, err)
 			}
 			return w, err
 		},
@@ -310,7 +309,7 @@ func (c *Client) registerDefaults() {
 				_, err = c.BatchV1beta1().CronJobs(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
 			if err != nil {
-				return xerrors.Errorf("updating %s %s: %w", CronJobType, o.GetObjectMeta().GetName(), err)
+				return fmt.Errorf("updating %s %s: %w", CronJobType, o.GetObjectMeta().GetName(), err)
 			}
 			return err
 		},
@@ -329,7 +328,7 @@ func (c *Client) registerDefaults() {
 		) {
 			l, err := c.CoreV1().Services(ns).List(opts)
 			if err != nil {
-				return nil, xerrors.Errorf("getting list for %s: %w", ServiceType, err)
+				return nil, fmt.Errorf("getting list for %s: %w", ServiceType, err)
 			}
 
 			return func(tree PodTree) Controllers {
@@ -345,7 +344,7 @@ func (c *Client) registerDefaults() {
 		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
 			w, err := c.CoreV1().Services(ns).Watch(opts)
 			if err != nil {
-				err = xerrors.Errorf("getting watcher for %s: %w", ServiceType, err)
+				err = fmt.Errorf("getting watcher for %s: %w", ServiceType, err)
 			}
 			return w, err
 		},
@@ -354,7 +353,7 @@ func (c *Client) registerDefaults() {
 				_, err = c.CoreV1().Services(o.GetObjectMeta().GetNamespace()).Update(o)
 			}
 			if err != nil {
-				return xerrors.Errorf("updating %s %s: %w", ServiceType, o.GetObjectMeta().GetName(), err)
+				return fmt.Errorf("updating %s %s: %w", ServiceType, o.GetObjectMeta().GetName(), err)
 			}
 			return err
 		},

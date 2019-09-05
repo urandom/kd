@@ -1,7 +1,8 @@
 package k8s
 
 import (
-	"golang.org/x/xerrors"
+	"fmt"
+
 	av1 "k8s.io/api/apps/v1"
 	autov1 "k8s.io/api/autoscaling/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -10,7 +11,7 @@ import (
 func (c *Client) ScaleDeployment(o Controller, replicas int) error {
 	name := o.GetObjectMeta().GetName()
 	if _, ok := o.Controller().(*av1.Deployment); !ok {
-		return xerrors.Errorf("controller %s not a deployment", name)
+		return fmt.Errorf("controller %s not a deployment", name)
 	}
 
 	_, err := c.AppsV1().Deployments(o.GetObjectMeta().GetNamespace()).UpdateScale(
@@ -22,7 +23,7 @@ func (c *Client) ScaleDeployment(o Controller, replicas int) error {
 	)
 
 	if err != nil {
-		return xerrors.Errorf("scaling deployment %s: %w", name, err)
+		return fmt.Errorf("scaling deployment %s: %w", name, err)
 	}
 
 	return nil

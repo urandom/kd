@@ -2,6 +2,7 @@ package presenter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -9,7 +10,6 @@ import (
 	"github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
-	"golang.org/x/xerrors"
 )
 
 type Log struct {
@@ -35,7 +35,7 @@ func (p *Log) show(ctx context.Context, object k8s.ObjectMetaGetter, container s
 	})
 	data, err := p.client.Logs(ctx, object, container, []string{"yellow", "aqua", "chartreuse"})
 	if err != nil {
-		if xerrors.As(err, &k8s.ErrMultipleContainers{}) {
+		if errors.As(err, &k8s.ErrMultipleContainers{}) {
 			names := err.(k8s.ErrMultipleContainers).Containers
 			p.ui.StatusBar.StopSpin()
 			container := <-p.picker.PickFrom("Containers", names)

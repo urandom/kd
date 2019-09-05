@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"sort"
@@ -14,8 +15,6 @@ import (
 
 	"github.com/rivo/tview"
 	cv1 "k8s.io/api/core/v1"
-
-	"golang.org/x/xerrors"
 )
 
 type ErrMultipleContainers struct {
@@ -88,7 +87,7 @@ func (c *Client) Logs(ctx context.Context, object ObjectMetaGetter, container st
 		rc, err := req.Stream()
 		if err != nil {
 			cancel()
-			return nil, xerrors.Errorf("getting logs for pod %s: %w", name, err)
+			return nil, fmt.Errorf("getting logs for pod %s: %w", name, err)
 		}
 
 		prefix := name

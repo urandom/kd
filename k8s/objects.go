@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/xerrors"
 )
 
 type UnsupportedObjectError struct {
@@ -277,7 +276,7 @@ func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodW
 	watchers := []watch.Interface{}
 	w, err := c.CoreV1().Pods(nsName).Watch(meta.ListOptions{})
 	if err != nil {
-		return nil, xerrors.Errorf("creating pod watcher: %w", err)
+		return nil, fmt.Errorf("creating pod watcher: %w", err)
 	}
 	watchers = append(watchers, w)
 
@@ -299,7 +298,7 @@ func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodW
 
 	tree, err := c.PodTree(nsName)
 	if err != nil {
-		return nil, xerrors.Errorf("getting initial pod tree: %w", err)
+		return nil, fmt.Errorf("getting initial pod tree: %w", err)
 	}
 
 	ch := make(chan PodWatcherEvent)
@@ -348,7 +347,7 @@ func (c *Client) PodTree(nsName string) (PodTree, error) {
 	var pods *cv1.PodList
 	g.Go(func() (err error) {
 		if pods, err = c.CoreV1().Pods(nsName).List(meta.ListOptions{}); err != nil {
-			return xerrors.Errorf("getting list of pods for ns %s: %w", nsName, err)
+			return fmt.Errorf("getting list of pods for ns %s: %w", nsName, err)
 		}
 		return nil
 	})
@@ -413,11 +412,11 @@ func (c *Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 		update := &cv1.Pod{}
 
 		if err := json.Unmarshal(data, update); err != nil {
-			return xerrors.Errorf("unmarshaling data into pod: %w", err)
+			return fmt.Errorf("unmarshaling data into pod: %w", err)
 		}
 		update, err := c.CoreV1().Pods(v.GetNamespace()).Update(update)
 		if err != nil {
-			return xerrors.Errorf("updating pod %s: %w", update.GetName(), err)
+			return fmt.Errorf("updating pod %s: %w", update.GetName(), err)
 		}
 
 		*v = *update
@@ -433,7 +432,7 @@ func (c *Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 
 		update := reflect.New(reflect.TypeOf(object).Elem()).Interface()
 		if err := json.Unmarshal(data, update); err != nil {
-			return xerrors.Errorf("unmarshaling data into %s: %w", typeName, err)
+			return fmt.Errorf("unmarshaling data into %s: %w", typeName, err)
 		}
 
 		return op.Update(c, update.(ObjectMetaGetter))
@@ -448,12 +447,12 @@ func (c *Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) er
 	case *cv1.Pod:
 		err := c.CoreV1().Pods(v.GetNamespace()).Delete(v.GetName(), &meta.DeleteOptions{PropagationPolicy: &propagation})
 		if err != nil {
-			return xerrors.Errorf("deleting pod %s: %w", v.GetName(), err)
+			return fmt.Errorf("deleting pod %s: %w", v.GetName(), err)
 		}
 
 		pw, err := c.CoreV1().Pods(v.GetNamespace()).Watch(meta.ListOptions{FieldSelector: "metadata.name=" + v.GetName()})
 		if err != nil {
-			return xerrors.Errorf("getting pod watcher: %w", err)
+			return fmt.Errorf("getting pod watcher: %w", err)
 		}
 		for {
 			select {
@@ -486,7 +485,7 @@ func (c *Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) er
 				FieldSelector: "metadata.name=" + v.GetObjectMeta().GetName(),
 			})
 			if err != nil {
-				return xerrors.Errorf("getting %s watcher: %w", typeName, err)
+				return fmt.Errorf("getting %s watcher: %w", typeName, err)
 			}
 			for {
 				select {

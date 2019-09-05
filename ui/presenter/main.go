@@ -1,6 +1,7 @@
 package presenter
 
 import (
+	"errors"
 	"fmt"
 	"log"
 
@@ -8,7 +9,6 @@ import (
 	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
-	"golang.org/x/xerrors"
 )
 
 type FatalError struct {
@@ -78,13 +78,13 @@ func (p Error) DisplayError(err error) bool {
 
 	var buttons []string
 
-	if xerrors.As(err, &FatalError{}) {
+	if errors.As(err, &FatalError{}) {
 		buttons = append(buttons, buttonQuit)
 	} else {
 		buttons = append(buttons, buttonClose)
 	}
 
-	if xerrors.As(err, &UserRetryableError{}) {
+	if errors.As(err, &UserRetryableError{}) {
 		buttons = append(buttons, buttonRetry)
 	}
 

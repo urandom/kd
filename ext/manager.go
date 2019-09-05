@@ -1,10 +1,10 @@
 package ext
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/dop251/goja"
-	"golang.org/x/xerrors"
 )
 
 type Manager struct {
@@ -20,7 +20,7 @@ func (m Manager) Start(
 ) error {
 	ext, err := m.loader.Extensions()
 	if err != nil {
-		return xerrors.Errorf("loading extensions: %v", err)
+		return fmt.Errorf("loading extensions: %v", err)
 	}
 
 	o := options{}

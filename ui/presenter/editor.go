@@ -3,6 +3,7 @@ package presenter
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -17,7 +18,6 @@ import (
 	"github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
-	"golang.org/x/xerrors"
 	av1 "k8s.io/api/apps/v1"
 	kerrs "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/yaml"
@@ -81,14 +81,14 @@ func (p *Editor) edit(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
 			if err = p.client.UpdateObject(object, jsonData); err != nil {
 				var statusError *kerrs.StatusError
 
-				if xerrors.As(err, &statusError) {
+				if errors.As(err, &statusError) {
 					msg = strings.SplitN(statusError.ErrStatus.Message, "\n", 2)[0] + "\n"
 					continue
 				}
 
 				var unsupportedErr k8s.UnsupportedObjectError
-				if xerrors.As(err, &unsupportedErr) {
-					err = xerrors.Errorf(
+				if errors.As(err, &unsupportedErr) {
+					err = fmt.Errorf(
 						"Update not supported on %s: %w", unsupportedErr.TypeName, err)
 					return
 				}
@@ -122,8 +122,8 @@ func (p *Editor) delete(object k8s.ObjectMetaGetter) error {
 
 	if err := p.client.DeleteObject(object, time.Minute); err != nil {
 		var unsupportedErr k8s.UnsupportedObjectError
-		if xerrors.As(err, &unsupportedErr) {
-			return xerrors.Errorf(
+		if errors.As(err, &unsupportedErr) {
+			return fmt.Errorf(
 				"Update not supported on %s: %w", unsupportedErr.TypeName, err)
 		}
 		return err
@@ -152,7 +152,7 @@ func (p *Editor) scaleDeployment(c k8s.Controller) (err error) {
 				}
 				newReplicas, err = strconv.Atoi(text)
 				if err != nil {
-					err = xerrors.Errorf("converting %s to number: %w", text, err)
+					err = fmt.Errorf("converting %s to number: %w", text, err)
 				}
 			}).
 			AddButton(buttonClose, func() {
@@ -189,12 +189,12 @@ func externalEditor(text []byte, readBack bool) ([]byte, error) {
 
 	f, err := ioutil.TempFile("", "*.log")
 	if err != nil {
-		return nil, xerrors.Errorf("creating temporary file: %w", err)
+		return nil, fmt.Errorf("creating temporary file: %w", err)
 	}
 	defer os.Remove(f.Name())
 	_, err = f.Write(text)
 	if err != nil {
-		return nil, xerrors.Errorf("writing data to temporary file: %w", err)
+		return nil, fmt.Errorf("writing data to temporary file: %w", err)
 	}
 	f.Sync()
 
@@ -216,14 +216,14 @@ func externalEditor(text []byte, readBack bool) ([]byte, error) {
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 
 	if err = cmd.Run(); err != nil {
-		return nil, xerrors.Errorf("viewing data through %s: %w", editor, err)
+		return nil, fmt.Errorf("viewing data through %s: %w", editor, err)
 	}
 
 	if readBack {
 		f.Seek(0, 0)
 		b, err := ioutil.ReadAll(f)
 		if err != nil {
-			return nil, xerrors.Errorf("reading back data from temporary file: %w", editor, err)
+			return nil, fmt.Errorf("reading back data from temporary file: %w", editor, err)
 		}
 
 		return b, nil

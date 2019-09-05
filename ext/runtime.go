@@ -8,7 +8,6 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/urandom/kd/k8s"
-	"golang.org/x/xerrors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/yaml"
@@ -166,7 +165,7 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op Co
 			rt.ops <- func() {
 				defer func() {
 					if err := recover(); err != nil {
-						payloadC <- payload{err: xerrors.Errorf("%v", err)}
+						payloadC <- payload{err: fmt.Errorf("%v", err)}
 					}
 				}()
 				val := w(goja.FunctionCall{Arguments: []goja.Value{
@@ -178,7 +177,7 @@ func (rt *runtime) RegisterControllerOperator(typeName k8s.ControllerType, op Co
 				if watch, ok := val.Export().(watch.Interface); ok {
 					payloadC <- payload{watch: watch}
 				} else {
-					payloadC <- payload{err: xerrors.Errorf("invalid watch return type: %T", val.Export())}
+					payloadC <- payload{err: fmt.Errorf("invalid watch return type: %T", val.Export())}
 				}
 			}
 
@@ -250,7 +249,7 @@ func (rt *runtime) SetData() {
 func (rt *runtime) ToYAML(v interface{}) (string, error) {
 	b, err := yaml.Marshal(v)
 	if err != nil {
-		return "", xerrors.Errorf("marshaling object to yaml: %w", err)
+		return "", fmt.Errorf("marshaling object to yaml: %w", err)
 	}
 
 	return string(b), nil
