@@ -23,7 +23,7 @@ func (c *Client) ScaleDeployment(o Controller, replicas int) error {
 	)
 
 	if err != nil {
-		return fmt.Errorf("scaling deployment %s: %w", name, err)
+		return fmt.Errorf("scaling deployment %s: %w", name, NormalizeError(err))
 	}
 
 	return nil

@@ -87,7 +87,7 @@ func (c *Client) Logs(ctx context.Context, object ObjectMetaGetter, container st
 		rc, err := req.Stream()
 		if err != nil {
 			cancel()
-			return nil, fmt.Errorf("getting logs for pod %s: %w", name, err)
+			return nil, fmt.Errorf("getting logs for pod %s: %w", name, NormalizeError(err))
 		}
 
 		prefix := name

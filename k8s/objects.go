@@ -276,7 +276,7 @@ func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodW
 	watchers := []watch.Interface{}
 	w, err := c.CoreV1().Pods(nsName).Watch(meta.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("creating pod watcher: %w", err)
+		return nil, fmt.Errorf("creating pod watcher: %w", NormalizeError(err))
 	}
 	watchers = append(watchers, w)
 
@@ -298,7 +298,7 @@ func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodW
 
 	tree, err := c.PodTree(nsName)
 	if err != nil {
-		return nil, fmt.Errorf("getting initial pod tree: %w", err)
+		return nil, fmt.Errorf("getting initial pod tree: %w", NormalizeError(err))
 	}
 
 	ch := make(chan PodWatcherEvent)
@@ -347,7 +347,7 @@ func (c *Client) PodTree(nsName string) (PodTree, error) {
 	var pods *cv1.PodList
 	g.Go(func() (err error) {
 		if pods, err = c.CoreV1().Pods(nsName).List(meta.ListOptions{}); err != nil {
-			return fmt.Errorf("getting list of pods for ns %s: %w", nsName, err)
+			return fmt.Errorf("getting list of pods for ns %s: %w", nsName, NormalizeError(err))
 		}
 		return nil
 	})
@@ -416,7 +416,7 @@ func (c *Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 		}
 		update, err := c.CoreV1().Pods(v.GetNamespace()).Update(update)
 		if err != nil {
-			return fmt.Errorf("updating pod %s: %w", update.GetName(), err)
+			return fmt.Errorf("updating pod %s: %w", update.GetName(), NormalizeError(err))
 		}
 
 		*v = *update
@@ -435,7 +435,7 @@ func (c *Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 			return fmt.Errorf("unmarshaling data into %s: %w", typeName, err)
 		}
 
-		return op.Update(c, update.(ObjectMetaGetter))
+		return NormalizeError(op.Update(c, update.(ObjectMetaGetter)))
 	}
 
 	return nil
@@ -447,12 +447,12 @@ func (c *Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) er
 	case *cv1.Pod:
 		err := c.CoreV1().Pods(v.GetNamespace()).Delete(v.GetName(), &meta.DeleteOptions{PropagationPolicy: &propagation})
 		if err != nil {
-			return fmt.Errorf("deleting pod %s: %w", v.GetName(), err)
+			return fmt.Errorf("deleting pod %s: %w", v.GetName(), NormalizeError(err))
 		}
 
 		pw, err := c.CoreV1().Pods(v.GetNamespace()).Watch(meta.ListOptions{FieldSelector: "metadata.name=" + v.GetName()})
 		if err != nil {
-			return fmt.Errorf("getting pod watcher: %w", err)
+			return fmt.Errorf("getting pod watcher: %w", NormalizeError(err))
 		}
 		for {
 			select {
@@ -485,7 +485,7 @@ func (c *Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) er
 				FieldSelector: "metadata.name=" + v.GetObjectMeta().GetName(),
 			})
 			if err != nil {
-				return fmt.Errorf("getting %s watcher: %w", typeName, err)
+				return fmt.Errorf("getting %s watcher: %w", typeName, NormalizeError(err))
 			}
 			for {
 				select {
@@ -502,8 +502,6 @@ func (c *Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) er
 
 		return nil
 	}
-
-	return nil
 }
 
 func (c *Client) selectFromWatchers(

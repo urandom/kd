@@ -83,7 +83,7 @@ type GenericObjList struct {
 func (c *Client) ResultToObject(result rest.Result) (ObjectMetaGetter, error) {
 	b, err := result.Raw()
 	if err != nil {
-		return nil, fmt.Errorf("obtaining result data: %w", err)
+		return nil, fmt.Errorf("obtaining result data: %w", NormalizeError(err))
 	}
 
 	var o GenericObj
@@ -98,7 +98,7 @@ func (c *Client) ResultToObject(result rest.Result) (ObjectMetaGetter, error) {
 func (c *Client) ResultToObjectList(result rest.Result) ([]GenericObj, error) {
 	b, err := result.Raw()
 	if err != nil {
-		return nil, fmt.Errorf("obtaining result data: %w", err)
+		return nil, fmt.Errorf("obtaining result data: %w", NormalizeError(err))
 	}
 
 	var o GenericObjList
