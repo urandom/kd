@@ -21,6 +21,7 @@ func New() *UI {
 	app := tview.NewApplication()
 	pages := tview.NewPages()
 
+	app.EnableMouse()
 	app.SetRoot(pages, true)
 
 	ui := UI{App: app, Pages: pages}
