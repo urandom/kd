@@ -15,7 +15,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/rivo/tview"
+	tview "github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
 	av1 "k8s.io/api/apps/v1"

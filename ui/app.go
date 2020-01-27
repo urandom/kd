@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"github.com/rivo/tview"
+	tview "github.com/rivo/tview"
 )
 
 type UI struct {

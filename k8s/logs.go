@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rivo/tview"
+	tview "github.com/rivo/tview"
 	cv1 "k8s.io/api/core/v1"
 )
 

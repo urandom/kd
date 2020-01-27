@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell"
-	"github.com/rivo/tview"
+	tview "github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
 	"k8s.io/apimachinery/pkg/util/duration"

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/rivo/tview"
+	tview "github.com/rivo/tview"
 	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"

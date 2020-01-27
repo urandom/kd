@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rivo/tview"
+	tview "github.com/rivo/tview"
 )
 
 type ActionBar struct {
