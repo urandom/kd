@@ -34,6 +34,6 @@ require (
 	sigs.k8s.io/yaml v1.1.0
 )
 
-replace github.com/rivo/tview => git.sr.ht/~tslocum/cview v1.4.0
+replace github.com/rivo/tview => gitlab.com/tslocum/cview v1.4.1
 
 go 1.13
