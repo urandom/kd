@@ -30,10 +30,10 @@ func NewActionBar(input *event.Input) *ActionBar {
 		SetDynamicColors(true), input, nil}
 
 	a.SetMouseCapture(func(e *cview.EventMouse) *cview.EventMouse {
-		x, _, _, _ := a.GetInnerRect()
 		if e.Action()&cview.MouseDown == 0 || e.Buttons()&tcell.Button1 == 0 {
 			return e
 		}
+		x, _, _, _ := a.GetInnerRect()
 		evx, _ := e.Position()
 		for _, item := range a.items {
 			if evx-x >= item.start && evx-x < item.start+item.len {

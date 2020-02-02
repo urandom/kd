@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/gdamore/tcell"
 	"gitlab.com/tslocum/cview"
 )
 
@@ -35,4 +36,36 @@ func (ui *UI) setupPages() {
 			AddItem(ui.ActionBar, 1, 0, false),
 		true, false)
 
+	ui.PodsTree.SetMouseCapture(func(e *cview.EventMouse) *cview.EventMouse {
+		if e.Action()&cview.MouseDown == 0 || e.Buttons()&tcell.Button1 == 0 {
+			return e
+		}
+		_, y, _, _ := ui.PodsTree.GetInnerRect()
+		offset := ui.PodsTree.GetScrollOffset()
+		_, evY := e.Position()
+		parent := ui.PodsTree.GetRoot()
+
+		var (
+			count      int
+			countNodes func(parent *cview.TreeNode)
+		)
+		countNodes = func(parent *cview.TreeNode) {
+			if !parent.IsExpanded() {
+				return
+			}
+			for _, n := range parent.GetChildren() {
+				count++
+
+				if evY-y+offset+1 == count {
+					ui.PodsTree.SetCurrentNode(n)
+					return
+				}
+				countNodes(n)
+			}
+		}
+
+		countNodes(parent)
+
+		return e
+	})
 }
