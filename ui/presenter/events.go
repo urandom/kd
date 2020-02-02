@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell"
-	tview "github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
+	"gitlab.com/tslocum/cview"
 	"k8s.io/apimachinery/pkg/util/duration"
 )
 
@@ -25,7 +25,7 @@ func NewEvents(ui *ui.UI, client *k8s.Client) *Events {
 	}
 }
 
-func (p *Events) show(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
+func (p *Events) show(object k8s.ObjectMetaGetter) (cview.Primitive, error) {
 	meta := object.GetObjectMeta()
 
 	log.Printf("Getting events for object %s", meta.GetName())
@@ -51,8 +51,8 @@ func (p *Events) show(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
 		}
 
 		for i, h := range headers {
-			p.ui.PodEvents.SetCell(0, i, tview.NewTableCell(h).
-				SetAlign(tview.AlignCenter).
+			p.ui.PodEvents.SetCell(0, i, cview.NewTableCell(h).
+				SetAlign(cview.AlignCenter).
 				SetTextColor(tcell.ColorYellow))
 
 		}
@@ -66,10 +66,10 @@ func (p *Events) show(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
 				switch j {
 				case 0:
 					p.ui.PodEvents.SetCell(i+1, j,
-						tview.NewTableCell(event.Type))
+						cview.NewTableCell(event.Type))
 				case 1:
 					p.ui.PodEvents.SetCell(i+1, j,
-						tview.NewTableCell(event.Reason))
+						cview.NewTableCell(event.Reason))
 				case 2:
 					first := duration.HumanDuration(time.Since(event.FirstTimestamp.Time))
 					interval := first
@@ -78,17 +78,17 @@ func (p *Events) show(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
 						interval = fmt.Sprintf("%s (x%d since %s)", last, event.Count, first)
 					}
 					p.ui.PodEvents.SetCell(i+1, j,
-						tview.NewTableCell(interval))
+						cview.NewTableCell(interval))
 				case 3:
 					from := event.Source.Component
 					if len(event.Source.Host) > 0 {
 						from += ", " + event.Source.Host
 					}
 					p.ui.PodEvents.SetCell(i+1, j,
-						tview.NewTableCell(from))
+						cview.NewTableCell(from))
 				case 4:
 					p.ui.PodEvents.SetCell(i+1, j,
-						tview.NewTableCell(strings.TrimSpace(event.Message)))
+						cview.NewTableCell(strings.TrimSpace(event.Message)))
 				}
 			}
 		}

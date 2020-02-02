@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	tview "github.com/rivo/tview"
+	"gitlab.com/tslocum/cview"
 	cv1 "k8s.io/api/core/v1"
 )
 
@@ -136,7 +136,7 @@ func demuxLogs(ctx context.Context, writer chan<- []byte, reader <-chan logData,
 					buf.Write([]byte("[white]"))
 				}
 
-				buf.Write([]byte(tview.Escape(string(d.line))))
+				buf.Write([]byte(cview.Escape(string(d.line))))
 			}
 			logData = nil
 

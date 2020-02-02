@@ -9,10 +9,10 @@ import (
 	"sync"
 
 	"github.com/gdamore/tcell"
-	tview "github.com/rivo/tview"
 	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
+	"gitlab.com/tslocum/cview"
 	cv1 "k8s.io/api/core/v1"
 )
 
@@ -182,10 +182,10 @@ func (p *Pods) populatePods(ns string) error {
 					p.state.namespace = ns
 
 					root := p.ui.PodsTree.GetRoot()
-					clsNodes := make([]*tview.TreeNode, 0, len(controllers))
+					clsNodes := make([]*cview.TreeNode, 0, len(controllers))
 					for i, c := range controllers {
 						names := map[string]struct{}{}
-						var clsNode *tview.TreeNode
+						var clsNode *cview.TreeNode
 						for _, node := range root.GetChildren() {
 							if c[0].Category() == node.GetReference() {
 								if len(c) == 0 {
@@ -200,7 +200,7 @@ func (p *Pods) populatePods(ns string) error {
 
 						if clsNode == nil && len(c) > 0 {
 							// class not found, but category not empty
-							clsNode = tview.NewTreeNode(controllers[i][0].Category().Plural()).
+							clsNode = cview.NewTreeNode(controllers[i][0].Category().Plural()).
 								SetSelectable(true).
 								SetColor(tcell.ColorCoral).
 								SetReference(controllers[i][0].Category())
@@ -210,17 +210,17 @@ func (p *Pods) populatePods(ns string) error {
 							continue
 						}
 
-						conNodes := make([]*tview.TreeNode, 0, len(c))
+						conNodes := make([]*cview.TreeNode, 0, len(c))
 						for _, controller := range c {
 							conName := controller.GetObjectMeta().GetName()
 							uid := controller.GetObjectMeta().GetUID()
-							var conNode *tview.TreeNode
+							var conNode *cview.TreeNode
 							for _, node := range clsNode.GetChildren() {
 								ref := node.GetReference().(k8s.Controller)
 								if uid == ref.GetObjectMeta().GetUID() {
-									podNodes := make([]*tview.TreeNode, 0, len(controller.Pods()))
+									podNodes := make([]*cview.TreeNode, 0, len(controller.Pods()))
 									for _, pod := range controller.Pods() {
-										var podNode *tview.TreeNode
+										var podNode *cview.TreeNode
 										for _, pNode := range node.GetChildren() {
 											podRef := pNode.GetReference().(*cv1.Pod)
 											if podRef.GetUID() == pod.GetUID() {
@@ -236,7 +236,7 @@ func (p *Pods) populatePods(ns string) error {
 												name = pod.GetNamespace() + "/" + name
 											}
 											names[name] = struct{}{}
-											podNode = tview.NewTreeNode(name).
+											podNode = cview.NewTreeNode(name).
 												SetReference(pod).SetSelectable(true)
 										}
 
@@ -258,10 +258,10 @@ func (p *Pods) populatePods(ns string) error {
 								}
 								names[conName] = struct{}{}
 
-								conNode = tview.NewTreeNode(conName).
+								conNode = cview.NewTreeNode(conName).
 									SetReference(controller).SetSelectable(true)
 								for _, pod := range controller.Pods() {
-									podNode := tview.NewTreeNode(pod.GetObjectMeta().GetName()).
+									podNode := cview.NewTreeNode(pod.GetObjectMeta().GetName()).
 										SetReference(pod).SetSelectable(true)
 									conNode.AddChild(podNode)
 								}
@@ -284,7 +284,7 @@ func (p *Pods) populatePods(ns string) error {
 		}
 	}()
 
-	p.ui.PodsTree.SetSelectedFunc(func(node *tview.TreeNode) {
+	p.ui.PodsTree.SetSelectedFunc(func(node *cview.TreeNode) {
 		ref := node.GetReference()
 		if _, ok := ref.(k8s.Category); ok {
 			node.SetExpanded(!node.IsExpanded())
@@ -298,7 +298,7 @@ func (p *Pods) populatePods(ns string) error {
 	return nil
 }
 
-func (p *Pods) setDetailsView(object tview.Primitive) {
+func (p *Pods) setDetailsView(object cview.Primitive) {
 	p.ui.App.QueueUpdateDraw(func() {
 		p.ui.PodsDetails.RemoveItem(p.ui.PodData)
 		p.ui.PodsDetails.RemoveItem(p.ui.PodEvents)
@@ -318,14 +318,14 @@ func (p *Pods) setDetailsView(object tview.Primitive) {
 }
 
 func (p *Pods) initKeybindings() {
-	p.ui.App.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	p.ui.InputEvents.Add("pods", func(event *tcell.EventKey) *tcell.EventKey {
 		switch p.ui.App.GetFocus().(type) {
-		case *tview.Button, *tview.InputField:
+		case *cview.Button, *cview.InputField:
 			return event
 		}
 		switch event.Key() {
 		case tcell.KeyTab, tcell.KeyBacktab:
-			var toFocus tview.Primitive
+			var toFocus cview.Primitive
 			switch p.ui.App.GetFocus() {
 			case p.ui.PodsTree:
 				switch p.state.details {
@@ -346,77 +346,6 @@ func (p *Pods) initKeybindings() {
 			p.ui.App.SetFocus(p.ui.NamespaceDropDown)
 			p.ui.App.QueueEvent(tcell.NewEventKey(tcell.KeyEnter, rune(tcell.KeyEnter), tcell.ModNone))
 			return nil
-		case tcell.KeyF1:
-			if p.state.object != nil {
-				go func() {
-					p.state.details = detailsObject
-					p.showObject(p.state.object)
-				}()
-				return nil
-			}
-		case tcell.KeyF2:
-			if p.state.object != nil {
-				go func() {
-					p.state.details = detailsEvents
-					p.showObject(p.state.object)
-				}()
-				return nil
-			}
-		case tcell.KeyF3:
-			if c, ok := p.state.object.(k8s.Controller); p.state.object != nil && (!ok || len(c.Pods()) > 0) {
-				go func() {
-					p.state.details = detailsLog
-					p.showObject(p.state.object)
-				}()
-				return nil
-			}
-		case tcell.KeyF4:
-			if p.state.object != nil {
-				switch p.state.details {
-				case detailsObject:
-					go func() {
-						_, err := p.editor.edit(p.state.object)
-						p.DisplayError(err)
-					}()
-				case detailsEvents:
-				case detailsLog, detailsText:
-					go func() {
-						p.DisplayError(p.editor.viewText())
-					}()
-				}
-				return nil
-			}
-		case tcell.KeyF5:
-			p.refreshFocused()
-			return nil
-		case tcell.KeyF6:
-			if _, ok := p.state.object.(k8s.Controller); !ok && p.state.object != nil {
-				go func() {
-					p.DisplayError(p.editor.delete(p.state.object))
-				}()
-				return nil
-			}
-		case tcell.KeyF7:
-			if c, ok := p.state.object.(k8s.Controller); ok && c.Category() == k8s.CategoryDeployment {
-				go func() {
-					p.DisplayError(p.editor.scaleDeployment(c))
-				}()
-				return nil
-			}
-		case tcell.KeyF9:
-			if p.state.object != nil && len(p.selectedActionsData) > 0 {
-				go func() {
-					choice := <-p.picker.PickFrom("More", p.selectedActionsData.Labels())
-					selected := p.selectedActionsData.FindForLabel(choice)
-					if selected.Valid() {
-						p.DisplayError(selected.Callback())
-					}
-				}()
-				return nil
-			}
-		case tcell.KeyF10:
-			p.ui.App.Stop()
-			return nil
 		case tcell.KeyCtrlF:
 			if p.state.activeComponent == podsDetails {
 				p.state.fullscreen = !p.state.fullscreen
@@ -433,7 +362,7 @@ func (p *Pods) initKeybindings() {
 	})
 }
 
-func (p *Pods) onFocused(primitive tview.Primitive) {
+func (p *Pods) onFocused(primitive cview.Primitive) {
 	p.state.activeComponent = primitiveToComponent(primitive)
 
 	p.ui.App.QueueUpdate(func() {
@@ -448,27 +377,96 @@ func (p *Pods) resetButtons() {
 
 func (p *Pods) setupButtons() {
 	if p.state.object != nil {
-		p.ui.ActionBar.AddAction(1, "Details")
-		p.ui.ActionBar.AddAction(2, "Events")
+		p.ui.ActionBar.AddAction(1, "Details", tcell.NewEventKey(tcell.KeyF1, 0x0, 0), func() bool {
+			if p.state.object != nil {
+				go func() {
+					p.state.details = detailsObject
+					p.showObject(p.state.object)
+				}()
+				return true
+			}
+			return false
+		})
+		p.ui.ActionBar.AddAction(2, "Events", tcell.NewEventKey(tcell.KeyF2, 0x0, 0), func() bool {
+			if p.state.object != nil {
+				go func() {
+					p.state.details = detailsEvents
+					p.showObject(p.state.object)
+				}()
+				return true
+			}
+			return false
+		})
 		if c, ok := p.state.object.(k8s.Controller); !ok || len(c.Pods()) > 0 {
-			p.ui.ActionBar.AddAction(3, "Logs")
+			p.ui.ActionBar.AddAction(3, "Logs", tcell.NewEventKey(tcell.KeyF3, 0x0, 0), func() bool {
+				if c, ok := p.state.object.(k8s.Controller); p.state.object != nil && (!ok || len(c.Pods()) > 0) {
+					go func() {
+						p.state.details = detailsLog
+						p.showObject(p.state.object)
+					}()
+					return true
+				}
+				return false
+			})
 		}
 		switch p.state.details {
 		case detailsObject:
-			p.ui.ActionBar.AddAction(4, "Edit")
+			p.ui.ActionBar.AddAction(4, "Edit", tcell.NewEventKey(tcell.KeyF4, 0x0, 0), func() bool {
+				if p.state.object != nil {
+					switch p.state.details {
+					case detailsObject:
+						go func() {
+							_, err := p.editor.edit(p.state.object)
+							p.DisplayError(err)
+						}()
+						return true
+					}
+				}
+				return false
+			})
 		case detailsEvents:
 		case detailsLog, detailsText:
-			p.ui.ActionBar.AddAction(4, "View")
+			p.ui.ActionBar.AddAction(4, "View", tcell.NewEventKey(tcell.KeyF4, 0x0, 0), func() bool {
+				if p.state.object != nil {
+					switch p.state.details {
+					case detailsLog, detailsText:
+						go func() {
+							p.DisplayError(p.editor.viewText())
+						}()
+						return true
+					}
+				}
+				return false
+			})
 		}
 	}
 	if p.state.activeComponent == podsTree || p.state.object != nil {
-		p.ui.ActionBar.AddAction(5, "Refresh")
+		p.ui.ActionBar.AddAction(5, "Refresh", tcell.NewEventKey(tcell.KeyF5, 0x0, 0), func() bool {
+			p.refreshFocused()
+			return true
+		})
 	}
 	if _, ok := p.state.object.(k8s.Controller); p.state.object != nil && !ok {
-		p.ui.ActionBar.AddAction(6, "Delete")
+		p.ui.ActionBar.AddAction(6, "Delete", tcell.NewEventKey(tcell.KeyF6, 0x0, 0), func() bool {
+			if _, ok := p.state.object.(k8s.Controller); !ok && p.state.object != nil {
+				go func() {
+					p.DisplayError(p.editor.delete(p.state.object))
+				}()
+				return true
+			}
+			return false
+		})
 	}
 	if c, ok := p.state.object.(k8s.Controller); ok && c.Category() == k8s.CategoryDeployment {
-		p.ui.ActionBar.AddAction(7, "Scale")
+		p.ui.ActionBar.AddAction(7, "Scale", tcell.NewEventKey(tcell.KeyF7, 0x0, 0), func() bool {
+			if c, ok := p.state.object.(k8s.Controller); ok && c.Category() == k8s.CategoryDeployment {
+				go func() {
+					p.DisplayError(p.editor.scaleDeployment(c))
+				}()
+				return true
+			}
+			return false
+		})
 	}
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -490,10 +488,25 @@ func (p *Pods) setupButtons() {
 		}
 		if len(p.selectedActionsData) > 0 {
 			p.selectedActionsData.SortByLabel()
-			p.ui.ActionBar.AddAction(9, "More")
+			p.ui.ActionBar.AddAction(9, "More", tcell.NewEventKey(tcell.KeyF9, 0x0, 0), func() bool {
+				if p.state.object != nil && len(p.selectedActionsData) > 0 {
+					go func() {
+						choice := <-p.picker.PickFrom("More", p.selectedActionsData.Labels())
+						selected := p.selectedActionsData.FindForLabel(choice)
+						if selected.Valid() {
+							p.DisplayError(selected.Callback())
+						}
+					}()
+					return true
+				}
+				return false
+			})
 		}
 	}
-	p.ui.ActionBar.AddAction(10, "Quit")
+	p.ui.ActionBar.AddAction(10, "Quit", tcell.NewEventKey(tcell.KeyF10, 0x0, 0), func() bool {
+		p.ui.App.Stop()
+		return true
+	})
 }
 
 func (p *Pods) refreshFocused() {
@@ -553,11 +566,11 @@ func (p *Pods) showObject(obj k8s.ObjectMetaGetter) {
 	}
 }
 
-func primitiveToComponent(p tview.Primitive) podsComponent {
+func primitiveToComponent(p cview.Primitive) podsComponent {
 	switch p.(type) {
-	case *tview.TreeView:
+	case *cview.TreeView:
 		return podsTree
-	case *tview.TextView, *tview.Table:
+	case *cview.TextView, *cview.Table:
 		return podsDetails
 	default:
 		return podsTree

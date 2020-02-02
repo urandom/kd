@@ -15,9 +15,9 @@ import (
 	"time"
 	"unicode"
 
-	tview "github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
+	"gitlab.com/tslocum/cview"
 	av1 "k8s.io/api/apps/v1"
 	kerrs "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/yaml"
@@ -39,7 +39,7 @@ func NewEditor(ui *ui.UI, client *k8s.Client) *Editor {
 	}
 }
 
-func (p *Editor) edit(object k8s.ObjectMetaGetter) (tview.Primitive, error) {
+func (p *Editor) edit(object k8s.ObjectMetaGetter) (cview.Primitive, error) {
 	if c, ok := object.(k8s.Controller); ok {
 		object = c.Controller()
 	}
@@ -140,7 +140,7 @@ func (p *Editor) scaleDeployment(c k8s.Controller) (err error) {
 	newReplicas := replicas
 	done := make(chan struct{})
 
-	p.form.DisplayForm(func(form *tview.Form) {
+	p.form.DisplayForm(func(form *cview.Form) {
 		form.SetBorder(true).SetTitle("Scale deployment")
 
 		form.

@@ -2,47 +2,94 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
-	tview "github.com/rivo/tview"
+	"github.com/gdamore/tcell"
+	"github.com/urandom/kd/ui/event"
+	"gitlab.com/tslocum/cview"
 )
 
-type ActionBar struct {
-	*tview.TextView
+type item struct {
+	fn                 func() bool
+	number, start, len int
 }
 
-func NewActionBar() ActionBar {
-	return ActionBar{tview.NewTextView().
+type ActionBar struct {
+	*cview.TextView
+
+	input *event.Input
+	items []item
+}
+
+func NewActionBar(input *event.Input) *ActionBar {
+	a := &ActionBar{cview.NewTextView().
 		SetWrap(false).
 		SetRegions(true).
-		SetDynamicColors(true)}
+		SetDynamicColors(true), input, nil}
+
+	a.SetMouseCapture(func(e *cview.EventMouse) *cview.EventMouse {
+		if e.Action()&cview.MouseDown == 0 || e.Buttons()&tcell.Button1 == 0 {
+			return e
+		}
+		x, _ := e.Position()
+		for _, item := range a.items {
+			if x >= item.start && x < item.start+item.len {
+				item.fn()
+			}
+		}
+		return nil
+	})
+	return a
 }
 
-func (a ActionBar) AddAction(number int, text string) {
+func (a *ActionBar) AddAction(number int, text string, ev *tcell.EventKey, fn func() bool) {
 	padding := ""
 	if a.GetText(false) != "" {
 		padding = " "
 	}
+	a.items = append(a.items, item{fn, number, len(a.GetText(true)), len(text)})
 	fmt.Fprintf(a.TextView, `["%d"][white:black]%s%d[black:aqua]%s[""]`, number, padding, number, text)
+	a.input.Add(generateId(number), func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == ev.Key() && event.Modifiers() == ev.Modifiers() {
+			if fn() {
+				return nil
+			}
+		}
+		return event
+	})
+}
+
+func (a *ActionBar) Clear() *ActionBar {
+	a.TextView.Clear()
+	for _, item := range a.items {
+		a.input.Remove(generateId(item.number))
+	}
+	a.items = nil
+	return a
+}
+
+func generateId(number int) string {
+	return "action-" + strconv.Itoa(number)
 }
 
 type statusState struct {
-	app      *tview.Application
+	app      *cview.Application
 	spinning bool
 	idx      int
 	timer    *time.Timer
 }
 
 type StatusBar struct {
-	*tview.TextView
+	*cview.TextView
 	stopC chan struct{}
 	ops   chan func(*statusState)
 }
 
-func NewStatusBar(app *tview.Application) StatusBar {
-	textView := tview.NewTextView().
-		SetTextColor(tview.Styles.SecondaryTextColor).
+func NewStatusBar(app *cview.Application) StatusBar {
+	textView := cview.NewTextView().
+		SetTextColor(cview.Styles.SecondaryTextColor).
 		SetWrap(false)
 	textView.SetBorderPadding(0, 0, 1, 1)
 
@@ -140,7 +187,7 @@ func (s StatusBar) ShowTextFor(text string, d time.Duration) {
 	})
 }
 
-func (s StatusBar) loop(app *tview.Application) {
+func (s StatusBar) loop(app *cview.Application) {
 	state := statusState{
 		app: app,
 	}
@@ -154,12 +201,12 @@ func (s StatusBar) loop(app *tview.Application) {
 }
 
 type Modal struct {
-	*tview.Grid
+	*cview.Grid
 }
 
-func NewModal(p tview.Primitive) Modal {
+func NewModal(p cview.Primitive) Modal {
 	return Modal{
-		tview.NewGrid().SetRows(0, 0, 0).SetColumns(0, 0, 0).
+		cview.NewGrid().SetRows(0, 0, 0).SetColumns(0, 0, 0).
 			AddItem(p, 1, 1, 1, 1, 0, 0, true),
 	}
 }
@@ -167,36 +214,36 @@ func NewModal(p tview.Primitive) Modal {
 type ModalList struct {
 	Modal
 
-	list *tview.List
+	list *cview.List
 }
 
 func NewModalList() ModalList {
-	list := tview.NewList()
+	list := cview.NewList()
 	return ModalList{NewModal(list), list}
 }
 
-func (m ModalList) List() *tview.List {
+func (m ModalList) List() *cview.List {
 	return m.list
 }
 
 type ModalForm struct {
 	Modal
 
-	form *tview.Form
+	form *cview.Form
 }
 
 func NewModalForm() ModalForm {
-	form := tview.NewForm().
-		SetButtonsAlign(tview.AlignCenter).
-		SetButtonBackgroundColor(tview.Styles.PrimitiveBackgroundColor).
-		SetButtonTextColor(tview.Styles.PrimaryTextColor)
+	form := cview.NewForm().
+		SetButtonsAlign(cview.AlignCenter).
+		SetButtonBackgroundColor(cview.Styles.PrimitiveBackgroundColor).
+		SetButtonTextColor(cview.Styles.PrimaryTextColor)
 	form.
-		SetBackgroundColor(tview.Styles.ContrastBackgroundColor).
+		SetBackgroundColor(cview.Styles.ContrastBackgroundColor).
 		SetBorderPadding(0, 0, 0, 0)
 
 	return ModalForm{NewModal(form), form}
 }
 
-func (m ModalForm) Form() *tview.Form {
+func (m ModalForm) Form() *cview.Form {
 	return m.form
 }

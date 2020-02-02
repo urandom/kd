@@ -1,7 +1,7 @@
 package ui
 
 import (
-	tview "github.com/rivo/tview"
+	"gitlab.com/tslocum/cview"
 )
 
 const (
@@ -10,24 +10,24 @@ const (
 )
 
 func (ui *UI) setupPages() {
-	ui.NamespaceDropDown = tview.NewDropDown().SetLabel("Namespace [CTRL-N[]: ")
-	ui.PodsTree = tview.NewTreeView().SetTopLevel(1).SetRoot(tview.NewTreeNode("."))
+	ui.NamespaceDropDown = cview.NewDropDown().SetLabel("Namespace [CTRL-N[]: ")
+	ui.PodsTree = cview.NewTreeView().SetTopLevel(1).SetRoot(cview.NewTreeNode("."))
 	ui.PodsTree.SetBorder(true).SetTitle("Pods")
-	ui.PodsDetails = tview.NewFlex()
-	ui.PodData = tview.NewTextView().SetWrap(false).
+	ui.PodsDetails = cview.NewFlex()
+	ui.PodData = cview.NewTextView().SetWrap(false).
 		SetDynamicColors(true).SetText("[lightgreen]<- Select an object")
 	ui.PodData.SetBorder(true).SetTitle("Details")
-	ui.PodEvents = tview.NewTable().SetBorders(true)
+	ui.PodEvents = cview.NewTable().SetBorders(true)
 	ui.PodEvents.SetBorder(true).SetTitle("Events")
 	ui.StatusBar = NewStatusBar(ui.App)
-	ui.ActionBar = NewActionBar()
+	ui.ActionBar = NewActionBar(ui.InputEvents)
 
 	ui.Pages.AddPage(PagePods,
-		tview.NewFlex().
-			SetDirection(tview.FlexRow).
+		cview.NewFlex().
+			SetDirection(cview.FlexRow).
 			AddItem(ui.NamespaceDropDown, 1, 0, false).
 			AddItem(
-				tview.NewFlex().
+				cview.NewFlex().
 					AddItem(ui.PodsTree, 0, 1, false).
 					AddItem(ui.PodsDetails.AddItem(ui.PodData, 0, 1, false), 0, 1, false),
 				0, 1, true).

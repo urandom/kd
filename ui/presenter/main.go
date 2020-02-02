@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 
-	tview "github.com/rivo/tview"
 	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
+	"gitlab.com/tslocum/cview"
 )
 
 type FatalError struct {
@@ -26,14 +26,14 @@ type Modal struct {
 	ui *ui.UI
 
 	isModalVisible bool
-	focused        tview.Primitive
+	focused        cview.Primitive
 }
 
 func newModal(ui *ui.UI) *Modal {
 	return &Modal{ui: ui}
 }
 
-func (p *Modal) display(prim tview.Primitive) {
+func (p *Modal) display(prim cview.Primitive) {
 	p.ui.App.QueueUpdateDraw(func() {
 		p.isModalVisible = true
 		p.focused = p.ui.App.GetFocus()
@@ -88,7 +88,7 @@ func (p Error) DisplayError(err error) bool {
 		buttons = append(buttons, buttonRetry)
 	}
 
-	errorModal := tview.NewModal()
+	errorModal := cview.NewModal()
 	errorModal.SetTitle("Error")
 	errorModal.
 		SetText(fmt.Sprintf("Error: %s", err)).
@@ -120,7 +120,7 @@ func NewConfirm(ui *ui.UI) Confirm {
 func (p Confirm) DisplayConfirm(title, message string) <-chan bool {
 	buttons := []string{buttonClose, buttonConfirm}
 
-	modal := tview.NewModal()
+	modal := cview.NewModal()
 	modal.SetTitle(title)
 	ch := make(chan bool)
 	modal.
@@ -147,7 +147,7 @@ func (p Picker) PickFrom(title string, items []string) <-chan string {
 	choice := make(chan string)
 
 	picker := ui.NewModalList()
-	picker.List().SetBackgroundColor(tview.Styles.ContrastBackgroundColor).SetBorder(true)
+	picker.List().SetBackgroundColor(cview.Styles.ContrastBackgroundColor).SetBorder(true)
 
 	list := picker.List().SetSelectedFunc(
 		func(idx int, main, sec string, sk rune) {
@@ -174,7 +174,7 @@ func NewForm(ui *ui.UI) Form {
 	return Form{Modal: newModal(ui)}
 }
 
-func (p Form) DisplayForm(populate func(*tview.Form)) {
+func (p Form) DisplayForm(populate func(*cview.Form)) {
 	form := ui.NewModalForm()
 	populate(form.Form())
 

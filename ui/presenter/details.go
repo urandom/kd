@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	tview "github.com/rivo/tview"
 	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
+	"gitlab.com/tslocum/cview"
 	av1 "k8s.io/api/apps/v1"
 	bv1 "k8s.io/api/batch/v1"
 	bv1b1 "k8s.io/api/batch/v1beta1"
@@ -43,7 +43,7 @@ func (p *Details) RegisterObjectMutateActions(
 	p.mu.Unlock()
 }
 
-func (p *Details) show(object k8s.ObjectMetaGetter) tview.Primitive {
+func (p *Details) show(object k8s.ObjectMetaGetter) cview.Primitive {
 	if v, ok := object.(k8s.Controller); ok {
 		object = v.Controller()
 	}
@@ -55,7 +55,7 @@ func (p *Details) show(object k8s.ObjectMetaGetter) tview.Primitive {
 			fmt.Fprint(p.ui.PodData, "[greenyellow::b]Summary\n=======\n\n")
 			p.printObjectSummary(p.ui.PodData, object)
 			fmt.Fprint(p.ui.PodData, "[greenyellow::b]Object\n======\n\n")
-			fmt.Fprint(p.ui.PodData, tview.Escape(string(data)))
+			fmt.Fprint(p.ui.PodData, cview.Escape(string(data)))
 		} else {
 			p.ui.PodData.SetText(err.Error())
 		}

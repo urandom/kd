@@ -7,9 +7,9 @@ import (
 	"log"
 	"time"
 
-	tview "github.com/rivo/tview"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
+	"gitlab.com/tslocum/cview"
 )
 
 type Log struct {
@@ -26,7 +26,7 @@ func NewLog(ui *ui.UI, client *k8s.Client) *Log {
 	}
 }
 
-func (p *Log) show(ctx context.Context, object k8s.ObjectMetaGetter, container string) (tview.Primitive, error) {
+func (p *Log) show(ctx context.Context, object k8s.ObjectMetaGetter, container string) (cview.Primitive, error) {
 	log.Println("Getting logs")
 	p.ui.StatusBar.SpinText("Loading logs")
 
@@ -72,7 +72,7 @@ func (p *Log) show(ctx context.Context, object k8s.ObjectMetaGetter, container s
 					initial = false
 				}
 				p.ui.App.QueueUpdateDraw(func() {
-					fmt.Fprint(p.ui.PodData, tview.TranslateANSI(string(b)))
+					fmt.Fprint(p.ui.PodData, cview.TranslateANSI(string(b)))
 				})
 			}
 		}
