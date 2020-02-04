@@ -50,8 +50,9 @@ func (a *ActionBar) AddAction(number int, text string, ev *tcell.EventKey, fn fu
 	if a.GetText(false) != "" {
 		padding = " "
 	}
-	a.items = append(a.items, item{fn, number, len(a.GetText(true)), len(text)})
-	fmt.Fprintf(a.TextView, `["%d"][white:black]%s%d[black:aqua]%s[""]`, number, padding, number, text)
+	numberStr := strconv.Itoa(number)
+	a.items = append(a.items, item{fn, number, len(a.GetText(true)), len(text) + len(padding) + len(numberStr)})
+	fmt.Fprintf(a.TextView, `["%s"][white:black]%s%d[black:aqua]%s[""]`, numberStr, padding, number, text)
 	a.input.Add(generateId(number), func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == ev.Key() && event.Modifiers() == ev.Modifiers() {
 			if fn() {

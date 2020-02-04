@@ -203,7 +203,10 @@ func (p *Pods) populatePods(ns string) error {
 							clsNode = cview.NewTreeNode(controllers[i][0].Category().Plural()).
 								SetSelectable(true).
 								SetColor(tcell.ColorCoral).
-								SetReference(controllers[i][0].Category())
+								SetReference(controllers[i][0].Category()).
+								SetSelectedFunc(func() {
+									clsNode.SetExpanded(!clsNode.IsExpanded())
+								})
 						}
 
 						if clsNode == nil {
@@ -212,6 +215,7 @@ func (p *Pods) populatePods(ns string) error {
 
 						conNodes := make([]*cview.TreeNode, 0, len(c))
 						for _, controller := range c {
+							controller := controller
 							conName := controller.GetObjectMeta().GetName()
 							uid := controller.GetObjectMeta().GetUID()
 							var conNode *cview.TreeNode
@@ -225,7 +229,10 @@ func (p *Pods) populatePods(ns string) error {
 											podRef := pNode.GetReference().(*cv1.Pod)
 											if podRef.GetUID() == pod.GetUID() {
 												podNode = pNode
-												podNode.SetReference(pod)
+												podNode.SetReference(pod).SetFocusedFunc(func() {
+													p.onFocused(p.ui.PodsTree)
+													p.showObject(pod)
+												})
 												break
 											}
 										}
@@ -237,14 +244,22 @@ func (p *Pods) populatePods(ns string) error {
 											}
 											names[name] = struct{}{}
 											podNode = cview.NewTreeNode(name).
-												SetReference(pod).SetSelectable(true)
+												SetReference(pod).
+												SetSelectable(true).
+												SetFocusedFunc(func() {
+													p.onFocused(p.ui.PodsTree)
+													p.showObject(pod)
+												})
 										}
 
 										podNodes = append(podNodes, podNode)
 									}
 
 									conNode = node
-									conNode.SetReference(controller)
+									conNode.SetReference(controller).SetFocusedFunc(func() {
+										p.onFocused(p.ui.PodsTree)
+										p.showObject(controller)
+									})
 									conNode.SetChildren(podNodes)
 									break
 								}
@@ -259,10 +274,20 @@ func (p *Pods) populatePods(ns string) error {
 								names[conName] = struct{}{}
 
 								conNode = cview.NewTreeNode(conName).
-									SetReference(controller).SetSelectable(true)
+									SetReference(controller).
+									SetSelectable(true).
+									SetFocusedFunc(func() {
+										p.onFocused(p.ui.PodsTree)
+										p.showObject(controller)
+									})
 								for _, pod := range controller.Pods() {
 									podNode := cview.NewTreeNode(pod.GetObjectMeta().GetName()).
-										SetReference(pod).SetSelectable(true)
+										SetReference(pod).
+										SetSelectable(true).
+										SetFocusedFunc(func() {
+											p.onFocused(p.ui.PodsTree)
+											p.showObject(pod)
+										})
 									conNode.AddChild(podNode)
 								}
 							}
@@ -283,17 +308,6 @@ func (p *Pods) populatePods(ns string) error {
 			}
 		}
 	}()
-
-	p.ui.PodsTree.SetSelectedFunc(func(node *cview.TreeNode) {
-		ref := node.GetReference()
-		if _, ok := ref.(k8s.Category); ok {
-			node.SetExpanded(!node.IsExpanded())
-			return
-		}
-
-		p.onFocused(p.ui.PodsTree)
-		p.showObject(ref.(k8s.ObjectMetaGetter))
-	})
 
 	return nil
 }

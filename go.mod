@@ -17,10 +17,9 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
-	github.com/rivo/tview v0.0.0-20200129065529-3a5c6317e432
 	github.com/spf13/pflag v1.0.3 // indirect
 	github.com/stretchr/testify v1.3.0 // indirect
-	gitlab.com/tslocum/cview v1.4.1
+	gitlab.com/tslocum/cview v1.4.3-0.20200204001320-d7ac9e862c66
 	golang.org/x/crypto v0.0.0-20190513172903-22d7a77e9e5f // indirect
 	golang.org/x/net v0.0.0-20190514140710-3ec191127204 // indirect
 	golang.org/x/oauth2 v0.0.0-20190220154721-9b3c75971fc9 // indirect
