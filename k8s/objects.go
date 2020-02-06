@@ -508,50 +508,54 @@ func (c *Client) selectFromWatchers(
 	ctx context.Context, agg chan<- PodWatcherEvent,
 	tree PodTree, wi ...watch.Interface) {
 
-	evC := make(chan watch.Event)
-	for _, w := range wi {
-		go func(w <-chan watch.Event) {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case ev := <-w:
-					evC <- ev
-				}
-			}
-		}(w.ResultChan())
+	cases := make([]reflect.SelectCase, len(wi)+1)
+	for i, w := range wi {
+		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(w.ResultChan())}
 	}
+	cases[len(wi)] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())}
 
+	log.Printf("Listening for events on %d watchers", len(wi))
 	agg <- PodWatcherEvent{Tree: tree.DeepCopy()}
 	for {
-		select {
-		case <-ctx.Done():
+		chosen, value, ok := reflect.Select(cases)
+		if chosen == len(wi) {
+			log.Println("Listening for events has been canceled")
 			return
-		case ev := <-evC:
-			switch o := ev.Object.(type) {
-			case *cv1.Pod:
-				modifyPodInTree(&tree, o, ev.Type == watch.Deleted)
-				agg <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
-			case ObjectMetaGetter:
-				typeName := ObjectType(o)
-				var factory ControllerFactory
+		}
+		if !ok {
+			log.Println("Channel #", chosen, "closed")
+			cases = append(cases[:chosen], cases[chosen+1:]...)
+		}
 
-				c.mu.RLock()
-				if op, ok := c.controllerOperators[ControllerType(typeName)]; ok {
-					factory = op.Factory
-				}
-				c.mu.RUnlock()
-				if ev.Type == watch.Deleted {
-					factory = nil
-				} else if factory == nil {
-					log.Printf("Factory function for type %s missing", typeName)
-					continue
-				}
+		ev, ok := value.Interface().(watch.Event)
+		if !ok {
+			log.Printf("Unkown channel value type: %T", value.Interface())
+			continue
+		}
+		log.Printf("Received event for object type %T", ev.Object)
+		switch o := ev.Object.(type) {
+		case *cv1.Pod:
+			modifyPodInTree(&tree, o, ev.Type == watch.Deleted)
+			agg <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
+		case ObjectMetaGetter:
+			typeName := ObjectType(o)
+			var factory ControllerFactory
 
-				tree.Controllers = modifyControllerList(tree.Controllers, o, factory, tree)
-
-				agg <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
+			c.mu.RLock()
+			if op, ok := c.controllerOperators[ControllerType(typeName)]; ok {
+				factory = op.Factory
 			}
+			c.mu.RUnlock()
+			if ev.Type == watch.Deleted {
+				factory = nil
+			} else if factory == nil {
+				log.Printf("Factory function for type %s missing", typeName)
+				continue
+			}
+
+			tree.Controllers = modifyControllerList(tree.Controllers, o, factory, tree)
+
+			agg <- PodWatcherEvent{Tree: tree.DeepCopy(), EventType: ev.Type}
 		}
 	}
 }
