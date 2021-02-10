@@ -6,15 +6,12 @@ import (
 
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/client-go/kubernetes/scheme"
 	rest "k8s.io/client-go/rest"
 )
 
 func (c *Client) RestClient(uri string) (*rest.RESTClient, error) {
 	conf := *c.config
 
-	conf.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: scheme.Codecs}
 	if conf.UserAgent == "" {
 		conf.UserAgent = rest.DefaultKubernetesUserAgent()
 	}
