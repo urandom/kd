@@ -230,24 +230,3 @@ func NewModalList() ModalList {
 func (m ModalList) List() *cview.List {
 	return m.list
 }
-
-type ModalForm struct {
-	Modal
-
-	form *cview.Form
-}
-
-func NewModalForm() ModalForm {
-	form := cview.NewForm()
-	form.SetButtonsAlign(cview.AlignCenter)
-	form.SetButtonBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
-	form.SetButtonTextColor(cview.Styles.PrimaryTextColor)
-	form.SetBackgroundColor(cview.Styles.ContrastBackgroundColor)
-	form.SetBorderPadding(0, 0, 0, 0)
-
-	return ModalForm{NewModal(form), form}
-}
-
-func (m ModalForm) Form() *cview.Form {
-	return m.form
-}

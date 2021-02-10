@@ -141,7 +141,6 @@ func (p *Editor) scaleDeployment(c k8s.Controller) (err error) {
 	done := make(chan struct{})
 
 	p.form.DisplayForm(func(form *cview.Form) {
-		form.SetBorder(true)
 		form.SetTitle("Scale deployment")
 
 		form.AddInputField("Replicas", strconv.Itoa(replicas), 20, func(text string, lastChar rune) bool {

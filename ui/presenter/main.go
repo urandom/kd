@@ -177,10 +177,10 @@ func NewForm(ui *ui.UI) Form {
 }
 
 func (p Form) DisplayForm(populate func(*cview.Form)) {
-	form := ui.NewModalForm()
-	populate(form.Form())
+	modal := cview.NewModal()
+	populate(modal.GetForm())
 
-	p.display(form)
+	p.display(modal)
 }
 
 type Main struct {
