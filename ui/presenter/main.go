@@ -90,20 +90,19 @@ func (p Error) DisplayError(err error) bool {
 
 	errorModal := cview.NewModal()
 	errorModal.SetTitle("Error")
-	errorModal.
-		SetText(fmt.Sprintf("Error: %s", err)).
-		AddButtons(buttons).
-		SetDoneFunc(func(idx int, label string) {
-			switch label {
-			case buttonQuit:
-				p.ui.App.Stop()
-			case buttonRetry:
-				go func() {
-					p.DisplayError(err.(UserRetryableError).RetryOp())
-				}()
-			}
-			go p.Close()
-		})
+	errorModal.SetText(fmt.Sprintf("Error: %s", err))
+	errorModal.AddButtons(buttons)
+	errorModal.SetDoneFunc(func(idx int, label string) {
+		switch label {
+		case buttonQuit:
+			p.ui.App.Stop()
+		case buttonRetry:
+			go func() {
+				p.DisplayError(err.(UserRetryableError).RetryOp())
+			}()
+		}
+		go p.Close()
+	})
 	p.display(errorModal)
 
 	return true
@@ -123,13 +122,12 @@ func (p Confirm) DisplayConfirm(title, message string) <-chan bool {
 	modal := cview.NewModal()
 	modal.SetTitle(title)
 	ch := make(chan bool)
-	modal.
-		SetText(message).
-		AddButtons(buttons).
-		SetDoneFunc(func(idx int, label string) {
-			ch <- label == buttonConfirm
-			go p.Close()
-		})
+	modal.SetText(message)
+	modal.AddButtons(buttons)
+	modal.SetDoneFunc(func(idx int, label string) {
+		ch <- label == buttonConfirm
+		go p.Close()
+	})
 	p.display(modal)
 
 	return ch
@@ -147,17 +145,21 @@ func (p Picker) PickFrom(title string, items []string) <-chan string {
 	choice := make(chan string)
 
 	picker := ui.NewModalList()
-	picker.List().SetBackgroundColor(cview.Styles.ContrastBackgroundColor).SetBorder(true)
+	list := picker.List()
+	list.SetBackgroundColor(cview.Styles.ContrastBackgroundColor)
+	list.SetBorder(true)
 
-	list := picker.List().SetSelectedFunc(
-		func(idx int, main, sec string, sk rune) {
-			choice <- main
+	picker.List().SetSelectedFunc(
+		func(idx int, item *cview.ListItem) {
+			choice <- item.GetMainText()
 			close(choice)
 			go p.Close()
 		})
 
 	for i := range items {
-		list.AddItem(items[i], "", rune(97+i), nil)
+		item := cview.NewListItem(items[i])
+		item.SetShortcut(rune(97 + i))
+		list.AddItem(item)
 	}
 
 	list.SetTitle(title)

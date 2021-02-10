@@ -76,6 +76,7 @@ func (c *Client) Logs(ctx context.Context, object ObjectMetaGetter, container st
 
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
+	defer cancel()
 
 	go demuxLogs(ctx, writer, reader, len(pods) > 1)
 

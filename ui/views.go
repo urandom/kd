@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gdamore/tcell"
+	"github.com/gdamore/tcell/v2"
 	"github.com/urandom/kd/ui/event"
 	"gitlab.com/tslocum/cview"
 )
@@ -24,14 +24,16 @@ type ActionBar struct {
 }
 
 func NewActionBar(input *event.Input) *ActionBar {
-	a := &ActionBar{cview.NewTextView().
-		SetWrap(false).
-		SetRegions(true).
-		SetDynamicColors(true), input, nil}
+	textView := cview.NewTextView()
+	textView.SetWrap(false)
+	textView.SetRegions(true)
+	textView.SetDynamicColors(true)
 
-	a.SetMouseCapture(func(e *cview.EventMouse) *cview.EventMouse {
-		if e.Action()&cview.MouseDown == 0 || e.Buttons()&tcell.Button1 == 0 {
-			return e
+	a := &ActionBar{textView, input, nil}
+
+	a.SetMouseCapture(func(action cview.MouseAction, e *tcell.EventMouse) (cview.MouseAction, *tcell.EventMouse) {
+		if action&cview.MouseLeftDown == 0 || e.Buttons()&tcell.Button1 == 0 {
+			return action, e
 		}
 		x, _, _, _ := a.GetInnerRect()
 		evx, _ := e.Position()
@@ -40,7 +42,7 @@ func NewActionBar(input *event.Input) *ActionBar {
 				item.fn()
 			}
 		}
-		return nil
+		return action, nil
 	})
 	return a
 }
@@ -90,9 +92,9 @@ type StatusBar struct {
 }
 
 func NewStatusBar(app *cview.Application) StatusBar {
-	textView := cview.NewTextView().
-		SetTextColor(cview.Styles.SecondaryTextColor).
-		SetWrap(false)
+	textView := cview.NewTextView()
+	textView.SetTextColor(cview.Styles.SecondaryTextColor)
+	textView.SetWrap(false)
 	textView.SetBorderPadding(0, 0, 1, 1)
 
 	s := StatusBar{TextView: textView, stopC: make(chan struct{}), ops: make(chan func(*statusState))}
@@ -207,10 +209,11 @@ type Modal struct {
 }
 
 func NewModal(p cview.Primitive) Modal {
-	return Modal{
-		cview.NewGrid().SetRows(0, 0, 0).SetColumns(0, 0, 0).
-			AddItem(p, 1, 1, 1, 1, 0, 0, true),
-	}
+	grid := cview.NewGrid()
+	grid.SetRows(0, 0, 0)
+	grid.SetColumns(0, 0, 0)
+	grid.AddItem(p, 1, 1, 1, 1, 0, 0, true)
+	return Modal{grid}
 }
 
 type ModalList struct {
@@ -235,13 +238,12 @@ type ModalForm struct {
 }
 
 func NewModalForm() ModalForm {
-	form := cview.NewForm().
-		SetButtonsAlign(cview.AlignCenter).
-		SetButtonBackgroundColor(cview.Styles.PrimitiveBackgroundColor).
-		SetButtonTextColor(cview.Styles.PrimaryTextColor)
-	form.
-		SetBackgroundColor(cview.Styles.ContrastBackgroundColor).
-		SetBorderPadding(0, 0, 0, 0)
+	form := cview.NewForm()
+	form.SetButtonsAlign(cview.AlignCenter)
+	form.SetButtonBackgroundColor(cview.Styles.PrimitiveBackgroundColor)
+	form.SetButtonTextColor(cview.Styles.PrimaryTextColor)
+	form.SetBackgroundColor(cview.Styles.ContrastBackgroundColor)
+	form.SetBorderPadding(0, 0, 0, 0)
 
 	return ModalForm{NewModal(form), form}
 }

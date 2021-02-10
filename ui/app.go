@@ -33,7 +33,7 @@ func New() *UI {
 
 func (ui *UI) init() {
 	ui.App.SetInputCapture(ui.InputEvents.GetInputCapture())
-	ui.App.EnableMouse()
+	ui.App.EnableMouse(true)
 	ui.App.SetRoot(ui.Pages, true)
 
 	ui.setupPages()

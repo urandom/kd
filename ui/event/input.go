@@ -1,6 +1,8 @@
 package event
 
-import "github.com/gdamore/tcell"
+import (
+	"github.com/gdamore/tcell/v2"
+)
 
 type callbackFn func(event *tcell.EventKey) *tcell.EventKey
 

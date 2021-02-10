@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"github.com/gdamore/tcell"
+	"github.com/gdamore/tcell/v2"
 	"gitlab.com/tslocum/cview"
 )
 
@@ -11,34 +11,47 @@ const (
 )
 
 func (ui *UI) setupPages() {
-	ui.NamespaceDropDown = cview.NewDropDown().SetLabel("Namespace [CTRL-N[]: ")
-	ui.PodsTree = cview.NewTreeView().SetTopLevel(1).SetRoot(cview.NewTreeNode("."))
-	ui.PodsTree.SetBorder(true).SetTitle("Pods")
+	ui.NamespaceDropDown = cview.NewDropDown()
+	ui.NamespaceDropDown.SetLabel("Namespace [CTRL-N[]: ")
+
+	ui.PodsTree = cview.NewTreeView()
+	ui.PodsTree.SetTopLevel(1)
+	ui.PodsTree.SetRoot(cview.NewTreeNode("."))
+	ui.PodsTree.SetBorder(true)
+	ui.PodsTree.SetTitle("Pods")
+
 	ui.PodsDetails = cview.NewFlex()
-	ui.PodData = cview.NewTextView().SetWrap(false).
-		SetDynamicColors(true).SetText("[lightgreen]<- Select an object")
-	ui.PodData.SetBorder(true).SetTitle("Details")
-	ui.PodEvents = cview.NewTable().SetBorders(true)
-	ui.PodEvents.SetBorder(true).SetTitle("Events")
+	ui.PodData = cview.NewTextView()
+	ui.PodData.SetWrap(false)
+	ui.PodData.SetDynamicColors(true)
+	ui.PodData.SetText("[lightgreen]<- Select an object")
+	ui.PodData.SetBorder(true)
+	ui.PodData.SetTitle("Details")
+	ui.PodsDetails.AddItem(ui.PodData, 0, 1, false)
+
+	ui.PodEvents = cview.NewTable()
+	ui.PodEvents.SetBorders(true)
+	ui.PodEvents.SetBorder(true)
+	ui.PodEvents.SetTitle("Events")
+
 	ui.StatusBar = NewStatusBar(ui.App)
 	ui.ActionBar = NewActionBar(ui.InputEvents)
 
-	ui.Pages.AddPage(PagePods,
-		cview.NewFlex().
-			SetDirection(cview.FlexRow).
-			AddItem(ui.NamespaceDropDown, 1, 0, false).
-			AddItem(
-				cview.NewFlex().
-					AddItem(ui.PodsTree, 0, 1, false).
-					AddItem(ui.PodsDetails.AddItem(ui.PodData, 0, 1, false), 0, 1, false),
-				0, 1, true).
-			AddItem(ui.StatusBar, 1, 0, false).
-			AddItem(ui.ActionBar, 1, 0, false),
-		true, false)
+	contentFlex := cview.NewFlex()
+	contentFlex.AddItem(ui.PodsTree, 0, 1, false)
+	contentFlex.AddItem(ui.PodsDetails, 0, 1, false)
 
-	ui.PodsTree.SetMouseCapture(func(e *cview.EventMouse) *cview.EventMouse {
-		if e.Action()&cview.MouseDown == 0 || e.Buttons()&tcell.Button1 == 0 {
-			return e
+	flex := cview.NewFlex()
+	flex.SetDirection(cview.FlexRow)
+	flex.AddItem(ui.NamespaceDropDown, 1, 0, false)
+	flex.AddItem(contentFlex, 0, 1, true)
+	flex.AddItem(ui.StatusBar, 1, 0, false)
+	flex.AddItem(ui.ActionBar, 1, 0, false)
+	ui.Pages.AddPage(PagePods, flex, true, false)
+
+	ui.PodsTree.SetMouseCapture(func(action cview.MouseAction, e *tcell.EventMouse) (cview.MouseAction, *tcell.EventMouse) {
+		if action&cview.MouseLeftDown == 0 || e.Buttons()&tcell.Button1 == 0 {
+			return action, e
 		}
 		_, y, _, _ := ui.PodsTree.GetInnerRect()
 		offset := ui.PodsTree.GetScrollOffset()
@@ -66,6 +79,6 @@ func (ui *UI) setupPages() {
 
 		countNodes(parent)
 
-		return e
+		return action, e
 	})
 }

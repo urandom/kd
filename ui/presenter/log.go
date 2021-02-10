@@ -31,7 +31,9 @@ func (p *Log) show(ctx context.Context, object k8s.ObjectMetaGetter, container s
 	p.ui.StatusBar.SpinText("Loading logs")
 
 	p.ui.App.QueueUpdateDraw(func() {
-		p.ui.PodData.Clear().SetRegions(false).SetDynamicColors(true)
+		p.ui.PodData.Clear()
+		p.ui.PodData.SetRegions(false)
+		p.ui.PodData.SetDynamicColors(true)
 	})
 	data, err := p.client.Logs(ctx, object, container, []string{"yellow", "aqua", "chartreuse"})
 	if err != nil {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gdamore/tcell"
+	"github.com/gdamore/tcell/v2"
 	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
@@ -97,11 +97,16 @@ func (p *Pods) populateNamespaces() error {
 	})
 
 	if namespaces, err := p.client.Namespaces(); err == nil {
+		opts := make([]*cview.DropDownOption, len(namespaces))
 		if namespaces[0] == "" {
 			namespaces[0] = AllNamespaces
 		}
+		for i, ns := range namespaces {
+			opts[i] = cview.NewDropDownOption(ns)
+		}
 		p.ui.App.QueueUpdateDraw(func() {
-			p.ui.NamespaceDropDown.SetOptions(namespaces, func(text string, idx int) {
+			p.ui.NamespaceDropDown.SetOptions(func(idx int, opt *cview.DropDownOption) {
+				text := opt.GetText()
 				if text == p.state.namespace {
 					return
 				}
@@ -113,7 +118,7 @@ func (p *Pods) populateNamespaces() error {
 					}
 					p.DisplayError(p.populatePods(text))
 				}()
-			})
+			}, opts...)
 			found := false
 			for i := range namespaces {
 				if namespaces[i] == p.state.namespace {
@@ -200,13 +205,13 @@ func (p *Pods) populatePods(ns string) error {
 
 						if clsNode == nil && len(c) > 0 {
 							// class not found, but category not empty
-							clsNode = cview.NewTreeNode(controllers[i][0].Category().Plural()).
-								SetSelectable(true).
-								SetColor(tcell.ColorCoral).
-								SetReference(controllers[i][0].Category()).
-								SetSelectedFunc(func() {
-									clsNode.SetExpanded(!clsNode.IsExpanded())
-								})
+							clsNode = cview.NewTreeNode(controllers[i][0].Category().Plural())
+							clsNode.SetSelectable(true)
+							clsNode.SetColor(tcell.ColorCoral)
+							clsNode.SetReference(controllers[i][0].Category())
+							clsNode.SetSelectedFunc(func() {
+								clsNode.SetExpanded(!clsNode.IsExpanded())
+							})
 						}
 
 						if clsNode == nil {
@@ -229,7 +234,8 @@ func (p *Pods) populatePods(ns string) error {
 											podRef := pNode.GetReference().(*cv1.Pod)
 											if podRef.GetUID() == pod.GetUID() {
 												podNode = pNode
-												podNode.SetReference(pod).SetFocusedFunc(func() {
+												podNode.SetReference(pod)
+												podNode.SetFocusedFunc(func() {
 													p.onFocused(p.ui.PodsTree)
 													p.showObject(pod)
 												})
@@ -243,20 +249,21 @@ func (p *Pods) populatePods(ns string) error {
 												name = pod.GetNamespace() + "/" + name
 											}
 											names[name] = struct{}{}
-											podNode = cview.NewTreeNode(name).
-												SetReference(pod).
-												SetSelectable(true).
-												SetFocusedFunc(func() {
-													p.onFocused(p.ui.PodsTree)
-													p.showObject(pod)
-												})
+											podNode = cview.NewTreeNode(name)
+											podNode.SetReference(pod)
+											podNode.SetSelectable(true)
+											podNode.SetFocusedFunc(func() {
+												p.onFocused(p.ui.PodsTree)
+												p.showObject(pod)
+											})
 										}
 
 										podNodes = append(podNodes, podNode)
 									}
 
 									conNode = node
-									conNode.SetReference(controller).SetFocusedFunc(func() {
+									conNode.SetReference(controller)
+									conNode.SetFocusedFunc(func() {
 										p.onFocused(p.ui.PodsTree)
 										p.showObject(controller)
 									})
@@ -273,21 +280,21 @@ func (p *Pods) populatePods(ns string) error {
 								}
 								names[conName] = struct{}{}
 
-								conNode = cview.NewTreeNode(conName).
-									SetReference(controller).
-									SetSelectable(true).
-									SetFocusedFunc(func() {
-										p.onFocused(p.ui.PodsTree)
-										p.showObject(controller)
-									})
+								conNode = cview.NewTreeNode(conName)
+								conNode.SetReference(controller)
+								conNode.SetSelectable(true)
+								conNode.SetFocusedFunc(func() {
+									p.onFocused(p.ui.PodsTree)
+									p.showObject(controller)
+								})
 								for _, pod := range controller.Pods() {
-									podNode := cview.NewTreeNode(pod.GetObjectMeta().GetName()).
-										SetReference(pod).
-										SetSelectable(true).
-										SetFocusedFunc(func() {
-											p.onFocused(p.ui.PodsTree)
-											p.showObject(pod)
-										})
+									podNode := cview.NewTreeNode(pod.GetObjectMeta().GetName())
+									podNode.SetReference(pod)
+									podNode.SetSelectable(true)
+									podNode.SetFocusedFunc(func() {
+										p.onFocused(p.ui.PodsTree)
+										p.showObject(pod)
+									})
 									conNode.AddChild(podNode)
 								}
 							}
@@ -540,8 +547,10 @@ func (p *Pods) refreshFocused() {
 func (p *Pods) showText(text string) {
 	p.state.details = detailsText
 	p.ui.App.QueueUpdateDraw(func() {
-		p.ui.PodData.SetText(text).SetRegions(true).
-			SetDynamicColors(true).ScrollToBeginning()
+		p.ui.PodData.SetText(text)
+		p.ui.PodData.SetRegions(true)
+		p.ui.PodData.SetDynamicColors(true)
+		p.ui.PodData.ScrollToBeginning()
 	})
 	p.setDetailsView(p.ui.PodData)
 }

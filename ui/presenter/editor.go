@@ -141,29 +141,29 @@ func (p *Editor) scaleDeployment(c k8s.Controller) (err error) {
 	done := make(chan struct{})
 
 	p.form.DisplayForm(func(form *cview.Form) {
-		form.SetBorder(true).SetTitle("Scale deployment")
+		form.SetBorder(true)
+		form.SetTitle("Scale deployment")
 
-		form.
-			AddInputField("Replicas", strconv.Itoa(replicas), 20, func(text string, lastChar rune) bool {
-				return unicode.IsDigit(lastChar)
-			}, func(text string) {
-				if text == "" {
-					return
-				}
-				newReplicas, err = strconv.Atoi(text)
-				if err != nil {
-					err = fmt.Errorf("converting %s to number: %w", text, err)
-				}
-			}).
-			AddButton(buttonClose, func() {
-				newReplicas = replicas
-				close(done)
-				go p.form.Close()
-			}).
-			AddButton(buttonOk, func() {
-				close(done)
-				go p.form.Close()
-			})
+		form.AddInputField("Replicas", strconv.Itoa(replicas), 20, func(text string, lastChar rune) bool {
+			return unicode.IsDigit(lastChar)
+		}, func(text string) {
+			if text == "" {
+				return
+			}
+			newReplicas, err = strconv.Atoi(text)
+			if err != nil {
+				err = fmt.Errorf("converting %s to number: %w", text, err)
+			}
+		})
+		form.AddButton(buttonClose, func() {
+			newReplicas = replicas
+			close(done)
+			go p.form.Close()
+		})
+		form.AddButton(buttonOk, func() {
+			close(done)
+			go p.form.Close()
+		})
 	})
 
 	<-done

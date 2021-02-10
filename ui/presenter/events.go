@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gdamore/tcell"
+	"github.com/gdamore/tcell/v2"
 	"github.com/urandom/kd/k8s"
 	"github.com/urandom/kd/ui"
 	"gitlab.com/tslocum/cview"
@@ -51,9 +51,10 @@ func (p *Events) show(object k8s.ObjectMetaGetter) (cview.Primitive, error) {
 		}
 
 		for i, h := range headers {
-			p.ui.PodEvents.SetCell(0, i, cview.NewTableCell(h).
-				SetAlign(cview.AlignCenter).
-				SetTextColor(tcell.ColorYellow))
+			cell := cview.NewTableCell(h)
+			cell.SetAlign(cview.AlignCenter)
+			cell.SetTextColor(tcell.ColorYellow)
+			p.ui.PodEvents.SetCell(0, i, cell)
 
 		}
 
