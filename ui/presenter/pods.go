@@ -128,7 +128,9 @@ func (p *Pods) populateNamespaces() error {
 				}
 			}
 			if !found {
-				p.ui.NamespaceDropDown.SetCurrentOption(0)
+				if len(namespaces) > 1 && namespaces[0] == AllNamespaces {
+					p.ui.NamespaceDropDown.SetCurrentOption(1)
+				}
 			}
 		})
 
