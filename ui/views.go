@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -36,9 +35,8 @@ func NewActionBar(input *event.Input) *ActionBar {
 		if action&cview.MouseLeftDown == 0 || e.Buttons()&tcell.Button1 == 0 || !a.InRect(e.Position()) {
 			return action, e
 		}
-		x, y, w, h := a.GetInnerRect()
-		evx, evy := e.Position()
-		log.Println(x, y, w, h, evx, evy)
+		x, _, _, _ := a.GetInnerRect()
+		evx, _ := e.Position()
 		for _, item := range a.items {
 			if evx-x >= item.start && evx-x < item.start+item.len {
 				item.fn()

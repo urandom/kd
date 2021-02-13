@@ -50,7 +50,7 @@ func (ui *UI) setupPages() {
 	ui.Pages.AddPage(PagePods, flex, true, false)
 
 	ui.PodsTree.SetMouseCapture(func(action cview.MouseAction, e *tcell.EventMouse) (cview.MouseAction, *tcell.EventMouse) {
-		if action&cview.MouseLeftDown == 0 || e.Buttons()&tcell.Button1 == 0 {
+		if action&cview.MouseLeftDown == 0 || e.Buttons()&tcell.Button1 == 0 || !ui.PodsTree.InRect(e.Position()) {
 			return action, e
 		}
 		_, y, _, _ := ui.PodsTree.GetInnerRect()
