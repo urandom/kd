@@ -231,6 +231,7 @@ func (p *Pods) populatePods(ns string) error {
 								if uid == ref.GetObjectMeta().GetUID() {
 									podNodes := make([]*cview.TreeNode, 0, len(controller.Pods()))
 									for _, pod := range controller.Pods() {
+										pod := pod
 										var podNode *cview.TreeNode
 										for _, pNode := range node.GetChildren() {
 											podRef := pNode.GetReference().(*cv1.Pod)
@@ -290,6 +291,7 @@ func (p *Pods) populatePods(ns string) error {
 									p.showObject(controller)
 								})
 								for _, pod := range controller.Pods() {
+									pod := pod
 									podNode := cview.NewTreeNode(pod.GetObjectMeta().GetName())
 									podNode.SetReference(pod)
 									podNode.SetSelectable(true)
