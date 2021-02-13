@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync/atomic"
 
 	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
@@ -25,7 +26,7 @@ type ClientFactory func() (*k8s.Client, error)
 type Modal struct {
 	ui *ui.UI
 
-	isModalVisible bool
+	isModalVisible int32
 	focused        cview.Primitive
 }
 
@@ -34,24 +35,24 @@ func newModal(ui *ui.UI) *Modal {
 }
 
 func (p *Modal) display(prim cview.Primitive) {
-	p.ui.App.QueueUpdateDraw(func() {
-		p.isModalVisible = true
-		p.focused = p.ui.App.GetFocus()
+	if atomic.CompareAndSwapInt32(&p.isModalVisible, 0, 1) {
+		p.ui.App.QueueUpdateDraw(func() {
+			p.focused = p.ui.App.GetFocus()
 
-		p.ui.Pages.AddPage(ui.PageModal, prim, true, false)
-		p.ui.Pages.ShowPage(ui.PageModal)
-		p.ui.App.SetFocus(prim)
-	})
+			p.ui.Pages.AddPage(ui.PageModal, prim, true, false)
+			p.ui.Pages.ShowPage(ui.PageModal)
+			p.ui.App.SetFocus(prim)
+		})
+	}
 }
 
 func (p *Modal) Close() {
-	p.ui.App.QueueUpdateDraw(func() {
-		if p.isModalVisible {
+	if atomic.CompareAndSwapInt32(&p.isModalVisible, 1, 0) {
+		p.ui.App.QueueUpdateDraw(func() {
 			p.ui.Pages.RemovePage(ui.PageModal)
-			p.isModalVisible = false
 			p.ui.App.SetFocus(p.focused)
-		}
-	})
+		})
+	}
 }
 
 type Error struct {

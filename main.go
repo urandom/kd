@@ -7,7 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/pprof"
+	"strconv"
 	"strings"
+
+	"net/http"
+	_ "net/http/pprof"
 
 	"github.com/urandom/kd/ext"
 	"github.com/urandom/kd/k8s"
@@ -19,6 +23,7 @@ import (
 var (
 	configF        = flag.String("kubeconfig", "", "path to kubeconfig file")
 	cpuProfileF    = flag.String("cpuprofile", "", "write cpu profile to file")
+	cpuPortF       = flag.Int("cpuport", 0, "serve cpu profile on port")
 	extensionPathF = flag.String("extensions", "", "path(s) to extensions directory. Comma separated")
 )
 
@@ -32,6 +37,12 @@ func main() {
 		}
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
+	}
+
+	if *cpuPortF != 0 {
+		go func() {
+			log.Println(http.ListenAndServe("localhost:"+strconv.Itoa(*cpuPortF), nil))
+		}()
 	}
 
 	if err := setupLogging(); err != nil {
