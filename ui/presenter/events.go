@@ -1,6 +1,7 @@
 package presenter
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -32,7 +33,9 @@ func (p *Events) show(object k8s.ObjectMetaGetter) (cview.Primitive, error) {
 	p.ui.StatusBar.SpinText("Loading events")
 	defer p.ui.StatusBar.StopSpin()
 
-	list, err := p.client.Events(object)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	list, err := p.client.Events(ctx, object)
 	if err != nil {
 		log.Printf("Error getting events for object %s: %s", meta.GetName(), err)
 		return p.ui.PodEvents, UserRetryableError{err, func() error {

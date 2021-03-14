@@ -7,6 +7,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/urandom/kd/ext"
@@ -96,7 +97,9 @@ func (p *Pods) populateNamespaces() error {
 		p.ui.Pages.SwitchToPage(ui.PagePods)
 	})
 
-	if namespaces, err := p.client.Namespaces(); err == nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if namespaces, err := p.client.Namespaces(ctx); err == nil {
 		opts := make([]*cview.DropDownOption, len(namespaces))
 		if namespaces[0] == "" {
 			namespaces[0] = AllNamespaces
@@ -149,13 +152,13 @@ func (p *Pods) populatePods(ns string) error {
 		p.cancelNSFn()
 	}
 
-	log.Printf("Getting pod tree for namespace %s", ns)
+	log.Printf("Getting pod tree for namespace %q", ns)
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancelNSFn = cancel
 
 	c, err := p.client.PodTreeWatcher(ctx, ns)
 	if err != nil {
-		log.Printf("Error getting pod tree for namespaces %s: %s", ns, err)
+		log.Printf("Error getting pod tree for namespaces %q: %s", ns, err)
 		cancel()
 		return UserRetryableError{err, func() error {
 			return p.populatePods(ns)

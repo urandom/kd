@@ -54,8 +54,14 @@ func (p *Editor) edit(object k8s.ObjectMetaGetter) (cview.Primitive, error) {
 #
 `)
 	p.ui.App.Suspend(func() {
+		var ctx context.Context
+		var cancel context.CancelFunc
 		var msg string
 		for {
+			if cancel != nil {
+				cancel()
+			}
+
 			data := append([]byte(nil), preemble...)
 			if msg != "" {
 				data = append(data, '#', ' ')
@@ -78,7 +84,9 @@ func (p *Editor) edit(object k8s.ObjectMetaGetter) (cview.Primitive, error) {
 				return
 			}
 
-			if err = p.client.UpdateObject(object, jsonData); err != nil {
+			ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err = p.client.UpdateObject(ctx, object, jsonData); err != nil {
 				var statusError *kerrs.StatusError
 
 				if errors.As(err, &statusError) {
@@ -120,7 +128,9 @@ func (p *Editor) delete(object k8s.ObjectMetaGetter) error {
 	p.ui.StatusBar.SpinText("Deleting " + object.GetObjectMeta().GetName())
 	defer p.ui.StatusBar.StopSpin()
 
-	if err := p.client.DeleteObject(object, time.Minute); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := p.client.DeleteObject(ctx, object, time.Minute); err != nil {
 		var unsupportedErr k8s.UnsupportedObjectError
 		if errors.As(err, &unsupportedErr) {
 			return fmt.Errorf(
@@ -170,7 +180,9 @@ func (p *Editor) scaleDeployment(c k8s.Controller) (err error) {
 		return err
 	}
 
-	err = p.client.ScaleDeployment(c, newReplicas)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	err = p.client.ScaleDeployment(ctx, c, newReplicas)
 	if err != nil {
 		return UserRetryableError{err, func() error {
 			return p.scaleDeployment(c)

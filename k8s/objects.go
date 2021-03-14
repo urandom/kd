@@ -274,7 +274,7 @@ type PodWatcherEvent struct {
 
 func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodWatcherEvent, error) {
 	watchers := []watch.Interface{}
-	w, err := c.CoreV1().Pods(nsName).Watch(meta.ListOptions{})
+	w, err := c.CoreV1().Pods(nsName).Watch(ctx, meta.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("creating pod watcher: %w", NormalizeError(err))
 	}
@@ -282,13 +282,14 @@ func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodW
 
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	for _, op := range c.controllerOperators {
+	for kind, op := range c.controllerOperators {
 		if op.Watch == nil {
 			continue
 		}
 
 		if w, err = op.Watch(c, nsName, meta.ListOptions{}); err != nil {
-			return nil, err
+			log.Printf("Error initialzing watcher for %q in namespace %q: %v", kind, nsName, err)
+			continue
 		}
 
 		if w != nil {
@@ -296,7 +297,7 @@ func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodW
 		}
 	}
 
-	tree, err := c.PodTree(nsName)
+	tree, err := c.PodTree(ctx, nsName)
 	if err != nil {
 		return nil, fmt.Errorf("getting initial pod tree: %w", NormalizeError(err))
 	}
@@ -336,7 +337,7 @@ func (c *Client) PodTreeWatcher(ctx context.Context, nsName string) (<-chan PodW
 	return window, nil
 }
 
-func (c *Client) PodTree(nsName string) (PodTree, error) {
+func (c *Client) PodTree(ctx context.Context, nsName string) (PodTree, error) {
 	tree := PodTree{}
 
 	c.mu.RLock()
@@ -346,7 +347,7 @@ func (c *Client) PodTree(nsName string) (PodTree, error) {
 
 	var pods *cv1.PodList
 	g.Go(func() (err error) {
-		if pods, err = c.CoreV1().Pods(nsName).List(meta.ListOptions{}); err != nil {
+		if pods, err = c.CoreV1().Pods(nsName).List(ctx, meta.ListOptions{}); err != nil {
 			return fmt.Errorf("getting list of pods for ns %s: %w", nsName, NormalizeError(err))
 		}
 		return nil
@@ -367,7 +368,8 @@ func (c *Client) PodTree(nsName string) (PodTree, error) {
 
 			gen, err := c.controllerOperators[t].List(c, nsName, meta.ListOptions{})
 			if err != nil {
-				return err
+				log.Printf("Error listing pods for controller type %q in namespace %q: %v", t, nsName, err)
+				return nil
 			}
 
 			genC <- genType{gen, t}
@@ -406,7 +408,7 @@ func (c *Client) PodTree(nsName string) (PodTree, error) {
 	return tree, nil
 }
 
-func (c *Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
+func (c *Client) UpdateObject(ctx context.Context, object ObjectMetaGetter, data []byte) error {
 	switch v := object.(type) {
 	case *cv1.Pod:
 		update := &cv1.Pod{}
@@ -414,7 +416,7 @@ func (c *Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 		if err := json.Unmarshal(data, update); err != nil {
 			return fmt.Errorf("unmarshaling data into pod: %w", err)
 		}
-		update, err := c.CoreV1().Pods(v.GetNamespace()).Update(update)
+		update, err := c.CoreV1().Pods(v.GetNamespace()).Update(ctx, update, meta.UpdateOptions{})
 		if err != nil {
 			return fmt.Errorf("updating pod %s: %w", update.GetName(), NormalizeError(err))
 		}
@@ -441,16 +443,16 @@ func (c *Client) UpdateObject(object ObjectMetaGetter, data []byte) error {
 	return nil
 }
 
-func (c *Client) DeleteObject(object ObjectMetaGetter, timeout time.Duration) error {
+func (c *Client) DeleteObject(ctx context.Context, object ObjectMetaGetter, timeout time.Duration) error {
 	propagation := meta.DeletePropagationForeground
 	switch v := object.(type) {
 	case *cv1.Pod:
-		err := c.CoreV1().Pods(v.GetNamespace()).Delete(v.GetName(), &meta.DeleteOptions{PropagationPolicy: &propagation})
+		err := c.CoreV1().Pods(v.GetNamespace()).Delete(ctx, v.GetName(), meta.DeleteOptions{PropagationPolicy: &propagation})
 		if err != nil {
 			return fmt.Errorf("deleting pod %s: %w", v.GetName(), NormalizeError(err))
 		}
 
-		pw, err := c.CoreV1().Pods(v.GetNamespace()).Watch(meta.ListOptions{FieldSelector: "metadata.name=" + v.GetName()})
+		pw, err := c.CoreV1().Pods(v.GetNamespace()).Watch(ctx, meta.ListOptions{FieldSelector: "metadata.name=" + v.GetName()})
 		if err != nil {
 			return fmt.Errorf("getting pod watcher: %w", NormalizeError(err))
 		}

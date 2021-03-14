@@ -3,6 +3,7 @@ module github.com/urandom/kd
 require (
 	github.com/dlclark/regexp2 v1.1.6 // indirect
 	github.com/dop251/goja v0.0.0-20190429205339-8d6ee3d16611
+	github.com/evanphx/json-patch v4.9.0+incompatible // indirect
 	github.com/gdamore/tcell v1.3.0
 	github.com/gdamore/tcell/v2 v2.1.1-0.20201225194624-29bb185874fd
 	github.com/go-sourcemap/sourcemap v2.1.2+incompatible // indirect
@@ -19,10 +20,11 @@ require (
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	google.golang.org/protobuf v1.24.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
-	k8s.io/api v0.17.17
-	k8s.io/apimachinery v0.17.17
-	k8s.io/client-go v0.17.17
+	k8s.io/api v0.18.8
+	k8s.io/apimachinery v0.18.8
+	k8s.io/client-go v0.18.8
 	k8s.io/klog v1.0.0
+	k8s.io/kube-openapi v0.0.0-20200410145947-bcb3869e6f29 // indirect
 	k8s.io/utils v0.0.0-20201110183641-67b214c5f920 // indirect
 	sigs.k8s.io/yaml v1.2.0
 )

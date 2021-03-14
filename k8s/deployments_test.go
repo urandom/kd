@@ -1,6 +1,7 @@
 package k8s_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -38,11 +39,12 @@ func TestClient_ScaleDeployment(t *testing.T) {
 
 			config := &rest.Config{Host: ts.URL}
 
-			c, err := k8s.NewForConfig(config)
+			c, err := k8s.NewForConfig(context.Background(), config)
 			if err != nil {
 				t.Errorf("Client.ScaleDeployment() NewForConfig error = %v", err)
 			}
 			if err := c.ScaleDeployment(
+				context.Background(),
 				k8s.NewGenericCtrl(tt.obj, "", nil, k8s.PodTree{}), 2,
 			); (err != nil) != tt.wantErr {
 				t.Errorf("Client.ScaleDeployment() error = %v, wantErr %v", err, tt.wantErr)

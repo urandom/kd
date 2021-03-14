@@ -1,6 +1,7 @@
 package k8s_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -46,11 +47,11 @@ func TestClient_Namespaces(t *testing.T) {
 			}))
 			defer ts.Close()
 
-			c, err := k8s.NewForConfig(&rest.Config{Host: ts.URL})
+			c, err := k8s.NewForConfig(context.Background(), &rest.Config{Host: ts.URL})
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := c.Namespaces()
+			got, err := c.Namespaces(context.Background())
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Client.Namespaces() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -92,12 +93,12 @@ func TestClient_Events(t *testing.T) {
 			}))
 			defer ts.Close()
 
-			c, err := k8s.NewForConfig(&rest.Config{Host: ts.URL})
+			c, err := k8s.NewForConfig(context.Background(), &rest.Config{Host: ts.URL})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			got, err := c.Events(&av1.Deployment{ObjectMeta: meta.ObjectMeta{Name: "test1", Namespace: "default"}})
+			got, err := c.Events(context.Background(), &av1.Deployment{ObjectMeta: meta.ObjectMeta{Name: "test1", Namespace: "default"}})
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Client.Events() error = %v, wantErr %v", err, tt.wantErr)
 				return

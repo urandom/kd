@@ -87,7 +87,7 @@ func TestClient_Logs(t *testing.T) {
 			}))
 			defer ts.Close()
 
-			c, err := k8s.NewForConfig(&rest.Config{Host: ts.URL})
+			c, err := k8s.NewForConfig(context.Background(), &rest.Config{Host: ts.URL})
 			if err != nil {
 				t.Fatal(err)
 			}

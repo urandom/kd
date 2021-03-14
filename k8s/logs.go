@@ -76,7 +76,6 @@ func (c *Client) Logs(ctx context.Context, object ObjectMetaGetter, container st
 
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
-	defer cancel()
 
 	go demuxLogs(ctx, writer, reader, len(pods) > 1)
 
@@ -85,7 +84,7 @@ func (c *Client) Logs(ctx context.Context, object ObjectMetaGetter, container st
 		name := pod.ObjectMeta.GetName()
 		req := c.CoreV1().Pods(pod.ObjectMeta.GetNamespace()).GetLogs(
 			name, &cv1.PodLogOptions{Previous: previous, Follow: true, Container: container, Timestamps: true})
-		rc, err := req.Stream()
+		rc, err := req.Stream(ctx)
 		if err != nil {
 			cancel()
 			return nil, fmt.Errorf("getting logs for pod %s: %w", name, NormalizeError(err))
@@ -107,6 +106,7 @@ func (c *Client) Logs(ctx context.Context, object ObjectMetaGetter, container st
 	go func() {
 		wg.Wait()
 		close(reader)
+		cancel()
 	}()
 
 	return writer, nil

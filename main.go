@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -54,7 +55,10 @@ func main() {
 		log.Fatal(err)
 	}
 	manager := ext.NewManager(loader)
-	p := presenter.NewMain(ui.New(), manager, func() (*k8s.Client, error) { return k8s.New(*configF) })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	p := presenter.NewMain(ui.New(), manager, func() (*k8s.Client, error) { return k8s.New(ctx, *configF) })
 
 	if err := p.Run(); err != nil {
 		fmt.Fprint(os.Stderr, err)

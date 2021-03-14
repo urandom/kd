@@ -79,6 +79,6 @@ func (ui *UI) setupPages() {
 
 		countNodes(parent)
 
-		return action, e
+		return action, nil
 	})
 }

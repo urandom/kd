@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -31,7 +32,7 @@ type Client struct {
 
 // New returns a new k8s Client, using the kubeconfig specified by the path, or
 // by reading the KUBECONFIG environment variable.
-func New(configPath string) (*Client, error) {
+func New(ctx context.Context, configPath string) (*Client, error) {
 	if configPath == "" {
 		configPath = os.Getenv("KUBECONFIG")
 	}
@@ -45,10 +46,10 @@ func New(configPath string) (*Client, error) {
 		return nil, fmt.Errorf("building config with path %s: %w", configPath, err)
 	}
 
-	return NewForConfig(config)
+	return NewForConfig(ctx, config)
 }
 
-func NewForConfig(config *rest.Config) (*Client, error) {
+func NewForConfig(ctx context.Context, config *rest.Config) (*Client, error) {
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("creating k8s clientset: %w", err)
@@ -57,13 +58,13 @@ func NewForConfig(config *rest.Config) (*Client, error) {
 	client := &Client{controllerOperators: ControllerOperators{}, config: config}
 	client.Clientset = clientset
 
-	client.registerDefaults()
+	client.registerDefaults(ctx)
 
 	return client, nil
 }
 
-func (c *Client) Namespaces() ([]string, error) {
-	ns, err := c.CoreV1().Namespaces().List(meta.ListOptions{})
+func (c *Client) Namespaces(ctx context.Context) ([]string, error) {
+	ns, err := c.CoreV1().Namespaces().List(ctx, meta.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("getting list of namespaces: %w", NormalizeError(err))
 	}
@@ -77,13 +78,13 @@ func (c *Client) Namespaces() ([]string, error) {
 	return namespaces, nil
 }
 
-func (c *Client) Events(obj ObjectMetaGetter) ([]cv1.Event, error) {
+func (c *Client) Events(ctx context.Context, obj ObjectMetaGetter) ([]cv1.Event, error) {
 	name, ns := obj.GetObjectMeta().GetName(), obj.GetObjectMeta().GetNamespace()
 	core := c.CoreV1()
 	events := core.Events(ns)
 	selector := events.GetFieldSelector(&name, &ns, nil, nil)
 	opts := meta.ListOptions{FieldSelector: selector.String()}
-	list, err := events.List(opts)
+	list, err := events.List(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("getting list of events for object %s: %w", name, NormalizeError(err))
 	}
@@ -96,7 +97,7 @@ func (c *Client) RegisterControllerOperator(kind ControllerType, op ControllerOp
 	c.mu.Unlock()
 }
 
-func (c *Client) registerDefaults() {
+func (c *Client) registerDefaults(ctx context.Context) {
 	c.RegisterControllerOperator(StatefulSetType, ControllerOperator{
 		Factory: func(o ObjectMetaGetter, tree PodTree) Controller {
 			if o, ok := o.(*av1.StatefulSet); ok {
@@ -108,7 +109,7 @@ func (c *Client) registerDefaults() {
 		List: func(c *Client, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
-			l, err := c.AppsV1().StatefulSets(ns).List(opts)
+			l, err := c.AppsV1().StatefulSets(ns).List(ctx, opts)
 			if err != nil {
 				return nil, fmt.Errorf("getting list for %s: %w", StatefulSetType, NormalizeError(err))
 			}
@@ -124,7 +125,7 @@ func (c *Client) registerDefaults() {
 			}, nil
 		},
 		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
-			w, err := c.AppsV1().StatefulSets(ns).Watch(opts)
+			w, err := c.AppsV1().StatefulSets(ns).Watch(ctx, opts)
 			if err != nil {
 				err = fmt.Errorf("getting watcher for %s: %w", StatefulSetType, NormalizeError(err))
 			}
@@ -132,7 +133,7 @@ func (c *Client) registerDefaults() {
 		},
 		Update: func(c *Client, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*av1.StatefulSet); ok {
-				_, err = c.AppsV1().StatefulSets(o.GetObjectMeta().GetNamespace()).Update(o)
+				_, err = c.AppsV1().StatefulSets(o.GetObjectMeta().GetNamespace()).Update(ctx, o, meta.UpdateOptions{})
 			}
 			if err != nil {
 				return fmt.Errorf("updating %s %s: %w", StatefulSetType, o.GetObjectMeta().GetName(), NormalizeError(err))
@@ -152,7 +153,7 @@ func (c *Client) registerDefaults() {
 		List: func(c *Client, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
-			l, err := c.AppsV1().Deployments(ns).List(opts)
+			l, err := c.AppsV1().Deployments(ns).List(ctx, opts)
 			if err != nil {
 				return nil, fmt.Errorf("getting list for %s: %w", DeploymentType, NormalizeError(err))
 			}
@@ -168,7 +169,7 @@ func (c *Client) registerDefaults() {
 			}, nil
 		},
 		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
-			w, err := c.AppsV1().Deployments(ns).Watch(opts)
+			w, err := c.AppsV1().Deployments(ns).Watch(ctx, opts)
 			if err != nil {
 				err = fmt.Errorf("getting watcher for %s: %w", DeploymentType, NormalizeError(err))
 			}
@@ -176,7 +177,7 @@ func (c *Client) registerDefaults() {
 		},
 		Update: func(c *Client, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*av1.Deployment); ok {
-				_, err = c.AppsV1().Deployments(o.GetObjectMeta().GetNamespace()).Update(o)
+				_, err = c.AppsV1().Deployments(o.GetObjectMeta().GetNamespace()).Update(ctx, o, meta.UpdateOptions{})
 			}
 			if err != nil {
 				return fmt.Errorf("updating %s %s: %w", DeploymentType, o.GetObjectMeta().GetName(), NormalizeError(err))
@@ -196,7 +197,7 @@ func (c *Client) registerDefaults() {
 		List: func(c *Client, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
-			l, err := c.AppsV1().DaemonSets(ns).List(opts)
+			l, err := c.AppsV1().DaemonSets(ns).List(ctx, opts)
 			if err != nil {
 				return nil, fmt.Errorf("getting list for %s: %w", DaemonSetType, NormalizeError(err))
 			}
@@ -212,7 +213,7 @@ func (c *Client) registerDefaults() {
 			}, nil
 		},
 		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
-			w, err := c.AppsV1().DaemonSets(ns).Watch(opts)
+			w, err := c.AppsV1().DaemonSets(ns).Watch(ctx, opts)
 			if err != nil {
 				err = fmt.Errorf("getting watcher for %s: %w", DaemonSetType, NormalizeError(err))
 			}
@@ -220,7 +221,7 @@ func (c *Client) registerDefaults() {
 		},
 		Update: func(c *Client, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*av1.DaemonSet); ok {
-				_, err = c.AppsV1().DaemonSets(o.GetObjectMeta().GetNamespace()).Update(o)
+				_, err = c.AppsV1().DaemonSets(o.GetObjectMeta().GetNamespace()).Update(ctx, o, meta.UpdateOptions{})
 			}
 			if err != nil {
 				return fmt.Errorf("updating %s %s: %w", DaemonSetType, o.GetObjectMeta().GetName(), NormalizeError(err))
@@ -240,7 +241,7 @@ func (c *Client) registerDefaults() {
 		List: func(c *Client, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
-			l, err := c.BatchV1().Jobs(ns).List(opts)
+			l, err := c.BatchV1().Jobs(ns).List(ctx, opts)
 			if err != nil {
 				return nil, fmt.Errorf("getting list for %s: %w", JobType, NormalizeError(err))
 			}
@@ -256,7 +257,7 @@ func (c *Client) registerDefaults() {
 			}, nil
 		},
 		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
-			w, err := c.BatchV1().Jobs(ns).Watch(opts)
+			w, err := c.BatchV1().Jobs(ns).Watch(ctx, opts)
 			if err != nil {
 				err = fmt.Errorf("getting watcher for %s: %w", JobType, NormalizeError(err))
 			}
@@ -264,7 +265,7 @@ func (c *Client) registerDefaults() {
 		},
 		Update: func(c *Client, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*bv1.Job); ok {
-				_, err = c.BatchV1().Jobs(o.GetObjectMeta().GetNamespace()).Update(o)
+				_, err = c.BatchV1().Jobs(o.GetObjectMeta().GetNamespace()).Update(ctx, o, meta.UpdateOptions{})
 			}
 			if err != nil {
 				return fmt.Errorf("updating %s %s: %w", JobType, o.GetObjectMeta().GetName(), NormalizeError(err))
@@ -284,7 +285,7 @@ func (c *Client) registerDefaults() {
 		List: func(c *Client, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
-			l, err := c.BatchV1beta1().CronJobs(ns).List(opts)
+			l, err := c.BatchV1beta1().CronJobs(ns).List(ctx, opts)
 			if err != nil {
 				return nil, fmt.Errorf("getting list for %s: %w", CronJobType, NormalizeError(err))
 			}
@@ -300,7 +301,7 @@ func (c *Client) registerDefaults() {
 			}, nil
 		},
 		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
-			w, err := c.BatchV1beta1().CronJobs(ns).Watch(opts)
+			w, err := c.BatchV1beta1().CronJobs(ns).Watch(ctx, opts)
 			if err != nil {
 				err = fmt.Errorf("getting watcher for %s: %w", CronJobType, NormalizeError(err))
 			}
@@ -308,7 +309,7 @@ func (c *Client) registerDefaults() {
 		},
 		Update: func(c *Client, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*bv1b1.CronJob); ok {
-				_, err = c.BatchV1beta1().CronJobs(o.GetObjectMeta().GetNamespace()).Update(o)
+				_, err = c.BatchV1beta1().CronJobs(o.GetObjectMeta().GetNamespace()).Update(ctx, o, meta.UpdateOptions{})
 			}
 			if err != nil {
 				return fmt.Errorf("updating %s %s: %w", CronJobType, o.GetObjectMeta().GetName(), NormalizeError(err))
@@ -328,7 +329,7 @@ func (c *Client) registerDefaults() {
 		List: func(c *Client, ns string, opts meta.ListOptions) (
 			ControllerGenerator, error,
 		) {
-			l, err := c.CoreV1().Services(ns).List(opts)
+			l, err := c.CoreV1().Services(ns).List(ctx, opts)
 			if err != nil {
 				return nil, fmt.Errorf("getting list for %s: %w", ServiceType, NormalizeError(err))
 			}
@@ -344,7 +345,7 @@ func (c *Client) registerDefaults() {
 			}, nil
 		},
 		Watch: func(c *Client, ns string, opts meta.ListOptions) (watch.Interface, error) {
-			w, err := c.CoreV1().Services(ns).Watch(opts)
+			w, err := c.CoreV1().Services(ns).Watch(ctx, opts)
 			if err != nil {
 				err = fmt.Errorf("getting watcher for %s: %w", ServiceType, NormalizeError(err))
 			}
@@ -352,7 +353,7 @@ func (c *Client) registerDefaults() {
 		},
 		Update: func(c *Client, o ObjectMetaGetter) (err error) {
 			if o, ok := o.(*cv1.Service); ok {
-				_, err = c.CoreV1().Services(o.GetObjectMeta().GetNamespace()).Update(o)
+				_, err = c.CoreV1().Services(o.GetObjectMeta().GetNamespace()).Update(ctx, o, meta.UpdateOptions{})
 			}
 			if err != nil {
 				return fmt.Errorf("updating %s %s: %w", ServiceType, o.GetObjectMeta().GetName(), NormalizeError(err))
